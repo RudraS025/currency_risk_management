@@ -7,6 +7,7 @@ from typing import Dict, Optional, List, Tuple, Any
 from datetime import datetime, timedelta
 import logging
 import pandas as pd
+import numpy as np
 from ..models.letter_of_credit import LetterOfCredit
 from ..data_providers.forward_rates_provider import ForwardRatesProvider, ForwardRate
 from ..data_providers.forex_provider import ForexDataProvider
@@ -33,7 +34,7 @@ class ForwardPLCalculator:
         self.forex_provider = forex_provider or ForexDataProvider()
     
     def calculate_daily_forward_pl(self, lc: LetterOfCredit, 
-                                  base_currency: str = "INR") -> Dict[str, Dict]:
+                                  base_currency: str = "INR") -> Dict[str, Any]:
         """
         Calculate daily P&L based on forward rates from signing to maturity.
         
@@ -45,46 +46,68 @@ class ForwardPLCalculator:
             base_currency: Currency for P&L calculation
         
         Returns:
-            Dictionary with daily P&L based on forward rates
+            Dictionary with daily P&L based on forward rates, including summary statistics
         """
         try:
             logger.info(f"Calculating daily forward P&L for {lc.lc_id}")
             
-            # Get daily forward rates from signing to today
-            forward_rates = self.forward_provider.get_daily_forward_rates(
-                lc.currency, base_currency,
-                lc.maturity_date.strftime("%Y-%m-%d"),
-                lc.signing_date,
-                datetime.now().strftime("%Y-%m-%d")
-            )
+            # Generate daily dates from signing to today (or maturity if past)
+            start_date = datetime.strptime(lc.signing_date, "%Y-%m-%d")
+            end_date = min(datetime.now(), lc.maturity_date)
             
-            if not forward_rates:
+            daily_dates = []
+            current_date = start_date
+            while current_date <= end_date:
+                # Skip weekends for business days only
+                if current_date.weekday() < 5:  # Monday = 0, Friday = 4
+                    daily_dates.append(current_date.strftime("%Y-%m-%d"))
+                current_date += timedelta(days=1)
+            
+            if not daily_dates:
+                logger.error("No valid business dates found")
+                return {}
+            
+            # Calculate forward rates for each day
+            daily_forward_rates = {}
+            maturity_date_str = lc.maturity_date.strftime("%Y-%m-%d")
+            
+            for date_str in daily_dates:
+                # Calculate days to maturity from this date
+                current_date = datetime.strptime(date_str, "%Y-%m-%d")
+                days_to_maturity = (lc.maturity_date - current_date).days
+                
+                if days_to_maturity >= 0:
+                    forward_rate = self.forward_provider.get_forward_rate(
+                        lc.currency, base_currency, date_str, maturity_date_str
+                    )
+                    
+                    if forward_rate:
+                        daily_forward_rates[date_str] = forward_rate.rate
+            
+            if not daily_forward_rates:
                 logger.error("No forward rates available")
                 return {}
             
             # Get initial forward rate (at signing)
-            signing_forward_rate = None
             signing_date_str = lc.signing_date
-            
-            # Find the closest forward rate to signing date
-            for date_str in sorted(forward_rates.keys()):
-                if date_str >= signing_date_str:
-                    signing_forward_rate = forward_rates[date_str].rate
-                    break
+            signing_forward_rate = daily_forward_rates.get(signing_date_str)
             
             if signing_forward_rate is None:
-                logger.error("No forward rate available for signing date")
-                return {}
+                # Use the first available rate
+                signing_forward_rate = next(iter(daily_forward_rates.values()))
             
             # Calculate daily P&L
-            daily_pl = {}
+            daily_pl_data = {}
+            daily_pl_values = []
             previous_value = lc.total_value * signing_forward_rate
             
-            for date_str in sorted(forward_rates.keys()):
-                forward_rate = forward_rates[date_str]
+            for date_str in sorted(daily_forward_rates.keys()):
+                forward_rate = daily_forward_rates[date_str]
+                current_date = datetime.strptime(date_str, "%Y-%m-%d")
+                days_to_maturity = (lc.maturity_date - current_date).days
                 
                 # Current expected value at maturity
-                current_expected_value = lc.total_value * forward_rate.rate
+                current_expected_value = lc.total_value * forward_rate
                 
                 # P&L vs initial expectation
                 unrealized_pl = current_expected_value - (lc.total_value * signing_forward_rate)
@@ -93,23 +116,67 @@ class ForwardPLCalculator:
                 # Daily change
                 daily_change = current_expected_value - previous_value
                 
-                daily_pl[date_str] = {
+                daily_pl_data[date_str] = {
                     'date': date_str,
-                    'forward_rate': forward_rate.rate,
-                    'days_to_maturity': forward_rate.days_to_maturity,
+                    'forward_rate': forward_rate,
+                    'days_to_maturity': days_to_maturity,
                     'expected_value_at_maturity': current_expected_value,
                     'unrealized_pl': unrealized_pl,
                     'pl_percentage': pl_percentage,
                     'daily_change': daily_change,
-                    'signing_forward_rate': signing_forward_rate,
-                    'source': forward_rate.source,
-                    'confidence': forward_rate.confidence
+                    'cumulative_pl': unrealized_pl
                 }
                 
+                daily_pl_values.append(unrealized_pl)
                 previous_value = current_expected_value
             
-            logger.info(f"Calculated forward P&L for {len(daily_pl)} days")
-            return daily_pl
+            # Calculate summary statistics
+            if daily_pl_values:
+                max_pl = max(daily_pl_values)
+                min_pl = min(daily_pl_values)
+                avg_pl = sum(daily_pl_values) / len(daily_pl_values)
+                current_pl = daily_pl_values[-1] if daily_pl_values else 0
+                
+                # Find max profit and loss dates
+                max_pl_date = None
+                min_pl_date = None
+                for date_str, data in daily_pl_data.items():
+                    if data['unrealized_pl'] == max_pl:
+                        max_pl_date = date_str
+                    if data['unrealized_pl'] == min_pl:
+                        min_pl_date = date_str
+            else:
+                max_pl = min_pl = avg_pl = current_pl = 0
+                max_pl_date = min_pl_date = None
+            
+            # Prepare result with all data needed for visualization
+            result = {
+                'lc_id': lc.lc_id,
+                'currency_pair': f"{lc.currency}/{base_currency}",
+                'lc_amount': lc.total_value,
+                'signing_date': signing_date_str,
+                'maturity_date': maturity_date_str,
+                'signing_forward_rate': signing_forward_rate,
+                'current_forward_rate': daily_forward_rates.get(sorted(daily_forward_rates.keys())[-1], signing_forward_rate),
+                'daily_pl': daily_pl_data,
+                'summary': {
+                    'current_pl': current_pl,
+                    'max_profit': max_pl,
+                    'max_loss': min_pl,
+                    'avg_pl': avg_pl,
+                    'max_profit_date': max_pl_date,
+                    'max_loss_date': min_pl_date,
+                    'total_days': len(daily_pl_data),
+                    'volatility': np.std(daily_pl_values) if len(daily_pl_values) > 1 else 0
+                },
+                'chart_data': [
+                    {'date': date_str, 'pl': data['unrealized_pl']} 
+                    for date_str, data in daily_pl_data.items()
+                ]
+            }
+            
+            logger.info(f"Calculated daily P&L for {len(daily_pl_data)} days. Current P&L: {current_pl:.2f}")
+            return result
             
         except Exception as e:
             logger.error(f"Error calculating daily forward P&L: {e}")

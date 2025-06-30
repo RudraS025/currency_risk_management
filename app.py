@@ -106,22 +106,39 @@ def calculate_pl():
         if data.get('use_forward_rates', False):
             calculator = ForwardPLCalculator()
             result = calculator.calculate_daily_forward_pl(lc, 'INR')
+            
+            # Format forward P&L results
+            summary = result.get('summary', {})
+            formatted_result = {
+                'total_pl_inr': summary.get('current_pl', 0),
+                'spot_rate': result.get('current_forward_rate', 85.0),
+                'original_rate': result.get('signing_forward_rate', 85.0),
+                'pl_percentage': (summary.get('current_pl', 0) / (lc.total_value * result.get('signing_forward_rate', 85.0))) * 100 if result.get('signing_forward_rate') else 0,
+                'days_remaining': lc.days_remaining,
+                'max_profit': summary.get('max_profit', 0),
+                'max_loss': summary.get('max_loss', 0),
+                'max_profit_date': summary.get('max_profit_date', ''),
+                'max_loss_date': summary.get('max_loss_date', ''),
+                'volatility': summary.get('volatility', 0),
+                'chart_data': result.get('chart_data', [])
+            }
         else:
             calculator = ProfitLossCalculator()
             result = calculator.calculate_current_pl(lc, 'INR')
+            
+            # Format spot P&L results
+            formatted_result = {
+                'total_pl_inr': result.get('unrealized_pl', 0),
+                'spot_rate': result.get('current_rate', 85.0),
+                'original_rate': result.get('signing_rate', 85.0),
+                'pl_percentage': result.get('pl_percentage', 0),
+                'days_remaining': lc.days_remaining,
+                'chart_data': []  # No daily data for spot calculation
+            }
         
         # Calculate risk metrics
         risk_calculator = RiskMetricsCalculator()
         risk_metrics = risk_calculator.calculate_value_at_risk(lc, base_currency='INR')
-        
-        # Format the results properly
-        formatted_result = {
-            'total_pl_inr': result.get('unrealized_pl', result.get('daily_pl', {}).get('today', 0)),
-            'spot_rate': result.get('current_rate', 85.0),
-            'original_rate': result.get('signing_rate', 85.0),
-            'pl_percentage': result.get('pl_percentage', 0),
-            'days_remaining': lc.days_remaining
-        }
         
         formatted_risk = {
             'var_95': risk_metrics.get('var_95', 0),
