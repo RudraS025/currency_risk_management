@@ -1,29 +1,27 @@
 """
 Flask Web Application for Currency Risk Management System
-Provides a web interface for the comprehensive currency risk management features
+Provides a web interface for calculating P&L and managing currency risk.
 """
 
-from flask import Flask, render_template, request, jsonify, send_file
-import os
-import sys
-from datetime import datetime, timedelta
-import json
+from flask import Flask, render_template, request, jsonify
 import traceback
+from datetime import datetime, timedelta
+import sys
+import os
 
-# Add src to path for imports
+# Add src directory to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from currency_risk_mgmt.models.letter_of_credit import LetterOfCredit
-from currency_risk_mgmt.data_providers.forex_provider import ForexDataProvider
-from currency_risk_mgmt.data_providers.forward_rates_provider import ForwardRatesProvider
 from currency_risk_mgmt.calculators.profit_loss import ProfitLossCalculator
 from currency_risk_mgmt.calculators.forward_pl_calculator import ForwardPLCalculator
 from currency_risk_mgmt.calculators.risk_metrics import RiskMetricsCalculator
+from currency_risk_mgmt.data_providers.forex_provider import ForexDataProvider
+from currency_risk_mgmt.data_providers.forward_rates_provider import ForwardRatesProvider
 from currency_risk_mgmt.reports.generator import ReportGenerator
 from currency_risk_mgmt.reports.forward_reports import ForwardRatesReportGenerator
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key')
 
 @app.route('/')
 def index():
@@ -58,16 +56,12 @@ def get_forward_rates():
         rates = {}
         periods = [30, 60, 90, 180, 365]
         
-        rates = {}
-        periods = [30, 60, 90, 180, 365]
-        
         # Get current spot rate as base
         forex_provider = ForexDataProvider()
         spot_rate = forex_provider.get_current_rate('USD', 'INR')
         
         for days in periods:
             # Calculate forward rate with slight premium based on time to maturity
-            # This provides more realistic forward rates instead of static fallback
             time_premium = (days / 365) * 0.02  # 2% annual premium
             rate = spot_rate * (1 + time_premium)
             rates[f'{days}d'] = rate
@@ -85,11 +79,16 @@ def get_forward_rates():
 
 @app.route('/api/calculate-pl', methods=['POST'])
 def calculate_pl():
-    """Calculate P&L for a trade scenario"""
+    """Calculate P&L for given LC parameters"""
     try:
         data = request.json
+        print(f"DEBUG: Received data: {data}")
         
-        # Create LC
+        # Create LC with proper date handling
+        issue_date = datetime.strptime(data['issue_date'], '%Y-%m-%d')
+        maturity_date = datetime.strptime(data['maturity_date'], '%Y-%m-%d')
+        maturity_days = (maturity_date - issue_date).days
+        
         lc = LetterOfCredit(
             lc_id=data.get('lc_number', 'WEB-LC-001'),
             commodity=data.get('commodity', 'Export'),
@@ -98,15 +97,27 @@ def calculate_pl():
             rate_per_unit=float(data['amount_usd']) / 1000,
             currency='USD',
             signing_date=data['issue_date'],
-            maturity_days=(datetime.strptime(data['maturity_date'], '%Y-%m-%d') - datetime.strptime(data['issue_date'], '%Y-%m-%d')).days,
+            maturity_days=maturity_days,
             customer_country=data.get('beneficiary', 'Customer Country')
         )
         
-        # Calculate P&L
-        if data.get('use_forward_rates', False):
-            calculator = ForwardPLCalculator()
-            result = calculator.calculate_daily_forward_pl(lc, 'INR')
-            
+        print(f"DEBUG: Created LC - {lc.lc_id}, Amount: ${lc.total_value}, Signing: {lc.signing_date}")
+        print(f"DEBUG: Maturity days: {lc.maturity_days}, Days remaining: {lc.days_remaining}")
+        print(f"DEBUG: Issue date: {issue_date}, Maturity date: {maturity_date}")
+        
+        # Calculate P&L - Always use forward rates for meaningful results
+        calculator = ForwardPLCalculator()
+        result = calculator.calculate_daily_forward_pl(lc, 'INR')
+        
+        # Debug: Print what we got
+        print(f"DEBUG: Forward calculation result keys: {list(result.keys()) if result else 'None'}")
+        if result:
+            summary = result.get('summary', {})
+            print(f"DEBUG: Summary keys: {list(summary.keys()) if summary else 'No summary'}")
+            print(f"DEBUG: Current P&L: {summary.get('current_pl', 'N/A')}")
+            print(f"DEBUG: Chart data points: {len(result.get('chart_data', []))}")
+        
+        if result and result.get('summary'):
             # Format forward P&L results
             summary = result.get('summary', {})
             formatted_result = {
@@ -122,19 +133,22 @@ def calculate_pl():
                 'volatility': summary.get('volatility', 0),
                 'chart_data': result.get('chart_data', [])
             }
+            print(f"DEBUG: Using forward P&L results - P&L: ₹{formatted_result['total_pl_inr']:,.2f}")
         else:
-            calculator = ProfitLossCalculator()
-            result = calculator.calculate_current_pl(lc, 'INR')
+            print("DEBUG: Forward calculation failed, using fallback")
+            # Fallback to spot calculation if forward calculation fails
+            spot_calculator = ProfitLossCalculator()
+            spot_result = spot_calculator.calculate_current_pl(lc, 'INR')
             
-            # Format spot P&L results
             formatted_result = {
-                'total_pl_inr': result.get('unrealized_pl', 0),
-                'spot_rate': result.get('current_rate', 85.0),
-                'original_rate': result.get('signing_rate', 85.0),
-                'pl_percentage': result.get('pl_percentage', 0),
+                'total_pl_inr': spot_result.get('unrealized_pl', 0),
+                'spot_rate': spot_result.get('current_rate', 85.0),
+                'original_rate': spot_result.get('signing_rate', 85.0),
+                'pl_percentage': spot_result.get('pl_percentage', 0),
                 'days_remaining': lc.days_remaining,
-                'chart_data': []  # No daily data for spot calculation
+                'chart_data': []
             }
+            print(f"DEBUG: Using fallback P&L results - P&L: ₹{formatted_result['total_pl_inr']:,.2f}")
         
         # Calculate risk metrics
         risk_calculator = RiskMetricsCalculator()
@@ -154,6 +168,7 @@ def calculate_pl():
         })
         
     except Exception as e:
+        print(f"DEBUG: Exception in calculate_pl: {e}")
         return jsonify({
             'success': False,
             'error': str(e),
@@ -186,12 +201,43 @@ def scenario_analysis():
             {'name': 'Worst Case', 'rate_change': -0.05}
         ])
         
+        # Enhanced scenario analysis using actual forward rate data
         calculator = ForwardPLCalculator()
+        
+        # First get the base forward P&L calculation
+        base_result = calculator.calculate_daily_forward_pl(lc, 'INR')
+        base_forward_rate = base_result.get('current_forward_rate', 85.0) if base_result else 85.0
+        base_pl = base_result.get('summary', {}).get('current_pl', 0) if base_result else 0
+        
         results = []
         
         for scenario in scenarios:
-            result = calculator.calculate_scenario_analysis(lc, scenario['rate_change'])
-            result['scenario_name'] = scenario['name']
+            # Calculate new rate based on scenario
+            rate_change = scenario['rate_change']
+            new_rate = base_forward_rate * (1 + rate_change)
+            
+            # Calculate P&L for this scenario
+            new_pl = lc.total_value * (new_rate - base_result.get('signing_forward_rate', 85.0)) if base_result else 0
+            pl_change = new_pl - base_pl
+            
+            # Determine impact level
+            impact_percentage = abs(pl_change) / (lc.total_value * base_forward_rate) * 100 if base_forward_rate else 0
+            if impact_percentage > 3:
+                impact = "High Impact"
+            elif impact_percentage > 1:
+                impact = "Medium Impact"
+            else:
+                impact = "Low Impact"
+            
+            result = {
+                'scenario_name': scenario['name'],
+                'rate_change_percent': rate_change * 100,
+                'new_rate': new_rate,
+                'pl_inr': new_pl,
+                'pl_change': pl_change,
+                'impact': impact,
+                'impact_percentage': impact_percentage
+            }
             results.append(result)
         
         return jsonify({
@@ -225,27 +271,69 @@ def generate_report():
             customer_country=data.get('beneficiary', 'Customer Country')
         )
         
-        # Generate report
-        if data.get('include_forward_analysis', False):
-            report_gen = ForwardRatesReportGenerator()
-            report_data = report_gen.generate_comprehensive_report(lc, 'INR')
-        else:
-            report_gen = ReportGenerator()
-            report_data = report_gen.generate_lc_summary_report(lc, 'INR')
+        # Generate comprehensive report using forward P&L analysis
+        forward_calculator = ForwardPLCalculator()
+        forward_result = forward_calculator.calculate_daily_forward_pl(lc, 'INR')
         
-        # Format report data properly for JSON response
-        formatted_report = {
-            'lc_details': {
-                'lc_id': lc.lc_id,
-                'commodity': lc.commodity,
-                'total_value_usd': lc.total_value,
-                'maturity_days': lc.maturity_days,
-                'days_remaining': lc.days_remaining
-            },
-            'executive_summary': 'LC analysis completed successfully. Current position shows manageable risk levels with appropriate P&L tracking.',
-            'report_sections': len(report_data) if isinstance(report_data, dict) else 1,
-            'generation_time': datetime.now().isoformat()
-        }
+        if forward_result:
+            summary = forward_result.get('summary', {})
+            
+            # Create meaningful report with actual data
+            formatted_report = {
+                'report_header': {
+                    'generated_date': datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p'),
+                    'lc_id': lc.lc_id,
+                    'total_value_usd': lc.total_value,
+                    'days_remaining': lc.days_remaining,
+                    'currency_pair': f"{lc.currency}/INR"
+                },
+                'pl_analysis': {
+                    'current_pl': summary.get('current_pl', 0),
+                    'max_profit': summary.get('max_profit', 0),
+                    'max_loss': summary.get('max_loss', 0),
+                    'max_profit_date': summary.get('max_profit_date', ''),
+                    'max_loss_date': summary.get('max_loss_date', ''),
+                    'volatility': summary.get('volatility', 0),
+                    'total_days_analyzed': summary.get('total_days', 0)
+                },
+                'forward_rates': {
+                    'signing_rate': forward_result.get('signing_forward_rate', 0),
+                    'current_rate': forward_result.get('current_forward_rate', 0),
+                    'rate_change': forward_result.get('current_forward_rate', 0) - forward_result.get('signing_forward_rate', 0)
+                },
+                'risk_assessment': {
+                    'current_pl_percentage': (summary.get('current_pl', 0) / (lc.total_value * forward_result.get('signing_forward_rate', 85.0))) * 100 if forward_result.get('signing_forward_rate') else 0,
+                    'risk_level': 'HIGH' if abs(summary.get('current_pl', 0)) > lc.total_value * 0.05 else 'MEDIUM' if abs(summary.get('current_pl', 0)) > lc.total_value * 0.02 else 'LOW',
+                    'recommendation': 'Consider hedging to lock in gains' if summary.get('current_pl', 0) > 0 else 'Monitor closely for recovery' if summary.get('current_pl', 0) < 0 else 'Position is neutral'
+                },
+                'executive_summary': {
+                    'title': 'Daily Forward P&L Analysis',
+                    'summary': f"Analysis of {lc.lc_id} shows current P&L of ₹{summary.get('current_pl', 0):,.2f} with maximum profit opportunity of ₹{summary.get('max_profit', 0):,.2f} and maximum risk exposure of ₹{summary.get('max_loss', 0):,.2f}.",
+                    'days_analyzed': summary.get('total_days', 0),
+                    'chart_data_points': len(forward_result.get('chart_data', []))
+                },
+                'metadata': {
+                    'report_sections': 6,
+                    'generation_time': datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p'),
+                    'analysis_type': 'Forward P&L Analysis'
+                }
+            }
+        else:
+            # Fallback report if forward calculation fails
+            formatted_report = {
+                'report_header': {
+                    'generated_date': datetime.now().strftime('%m/%d/%Y, %I:%M:%S %p'),
+                    'lc_id': lc.lc_id,
+                    'total_value_usd': lc.total_value,
+                    'days_remaining': lc.days_remaining,
+                    'status': 'Fallback calculation used'
+                },
+                'executive_summary': {
+                    'title': 'Basic LC Analysis',
+                    'summary': 'Forward P&L calculation unavailable, using basic analysis.',
+                    'recommendation': 'Enable forward rate analysis for detailed insights'
+                }
+            }
         
         return jsonify({
             'success': True,
@@ -265,10 +353,10 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
-        'version': '1.0.0'
+        'version': '2.0.0'
     })
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_ENV') == 'development'
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
