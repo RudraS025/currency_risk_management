@@ -3,7 +3,7 @@ Enhanced Profit and Loss calculator with Forward Rates support.
 Calculates P&L based on daily forward rates for LC maturity date.
 """
 
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple, Any
 from datetime import datetime, timedelta
 import logging
 import pandas as pd
@@ -290,6 +290,68 @@ class ForwardPLCalculator:
         except Exception as e:
             logger.error(f"Error generating forward P&L report: {e}")
             return {}
+    
+    def calculate_scenario_analysis(self, lc: LetterOfCredit, rate_change: float = 0.0) -> Dict[str, Any]:
+        """
+        Calculate scenario analysis for different rate changes.
+        
+        Args:
+            lc: Letter of Credit instance
+            rate_change: Rate change as decimal (e.g., 0.05 for 5% increase)
+        
+        Returns:
+            Dictionary with scenario analysis results
+        """
+        try:
+            logger.info(f"Calculating scenario analysis with {rate_change:.2%} rate change")
+            
+            # Get current forward rate
+            current_forward_rate = self.forward_provider.estimate_forward_rate(
+                lc.currency, 'INR', lc.days_remaining
+            )
+            
+            if not current_forward_rate:
+                current_forward_rate = 85.0  # Fallback rate
+            
+            # Apply scenario rate change
+            scenario_rate = current_forward_rate * (1 + rate_change)
+            
+            # Calculate total value in USD
+            total_value_usd = lc.total_value
+            
+            # Calculate scenario P&L
+            current_value_inr = total_value_usd * current_forward_rate
+            scenario_value_inr = total_value_usd * scenario_rate
+            scenario_pl = scenario_value_inr - current_value_inr
+            
+            # Determine impact level
+            if abs(rate_change) < 0.02:
+                impact = "Low Impact"
+            elif abs(rate_change) < 0.05:
+                impact = "Medium Impact"
+            else:
+                impact = "High Impact"
+            
+            return {
+                'scenario_rate': scenario_rate,
+                'current_rate': current_forward_rate,
+                'rate_change_percent': rate_change * 100,
+                'total_pl_inr': scenario_pl,
+                'current_value_inr': current_value_inr,
+                'scenario_value_inr': scenario_value_inr,
+                'impact': impact,
+                'recommendation': 'Monitor' if abs(rate_change) < 0.02 else 'Consider hedging'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error calculating scenario analysis: {e}")
+            return {
+                'total_pl_inr': 0,
+                'impact': 'Error in calculation',
+                'scenario_rate': 85.0,
+                'current_rate': 85.0,
+                'rate_change_percent': rate_change * 100
+            }
     
     def _get_signing_forward_rate(self, lc: LetterOfCredit, base_currency: str) -> Optional[float]:
         """Get forward rate that was available at signing date for the maturity."""

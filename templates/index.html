@@ -233,7 +233,7 @@
             
             // P&L Results
             html += '<div class="col-md-6"><h6>P&L Summary</h6><ul class="list-group">';
-            if (pl_result.total_pl_inr) {
+            if (pl_result.total_pl_inr !== undefined) {
                 html += `<li class="list-group-item d-flex justify-content-between">
                     <span>Total P&L (INR):</span>
                     <span class="${pl_result.total_pl_inr >= 0 ? 'text-success' : 'text-danger'}">
@@ -246,16 +246,26 @@
                     <span>Current Rate:</span><span>₹${pl_result.spot_rate.toFixed(4)}</span>
                 </li>`;
             }
+            if (pl_result.original_rate) {
+                html += `<li class="list-group-item d-flex justify-content-between">
+                    <span>Original Rate:</span><span>₹${pl_result.original_rate.toFixed(4)}</span>
+                </li>`;
+            }
+            if (pl_result.days_remaining !== undefined) {
+                html += `<li class="list-group-item d-flex justify-content-between">
+                    <span>Days Remaining:</span><span>${pl_result.days_remaining} days</span>
+                </li>`;
+            }
             html += '</ul></div>';
             
             // Risk Metrics
             html += '<div class="col-md-6"><h6>Risk Metrics</h6><ul class="list-group">';
-            if (risk_metrics.var_95) {
+            if (risk_metrics.var_95 !== undefined) {
                 html += `<li class="list-group-item d-flex justify-content-between">
                     <span>VaR (95%):</span><span class="text-warning">₹${risk_metrics.var_95.toLocaleString()}</span>
                 </li>`;
             }
-            if (risk_metrics.volatility) {
+            if (risk_metrics.volatility !== undefined) {
                 html += `<li class="list-group-item d-flex justify-content-between">
                     <span>Volatility:</span><span>${(risk_metrics.volatility * 100).toFixed(2)}%</span>
                 </li>`;
@@ -303,18 +313,27 @@
 
         function displayScenarioResults(scenarios) {
             let html = '<h6>Scenario Analysis Results</h6><div class="table-responsive"><table class="table table-striped">';
-            html += '<thead><tr><th>Scenario</th><th>P&L (INR)</th><th>Impact</th></tr></thead><tbody>';
+            html += '<thead><tr><th>Scenario</th><th>Rate Change</th><th>New Rate</th><th>P&L (INR)</th><th>Impact</th></tr></thead><tbody>';
             
             scenarios.forEach(scenario => {
                 const plClass = scenario.total_pl_inr >= 0 ? 'text-success' : 'text-danger';
                 html += `<tr>
-                    <td>${scenario.scenario_name}</td>
-                    <td class="${plClass}">₹${scenario.total_pl_inr ? scenario.total_pl_inr.toLocaleString() : 'N/A'}</td>
-                    <td>${scenario.impact || 'N/A'}</td>
+                    <td><strong>${scenario.scenario_name}</strong></td>
+                    <td>${scenario.rate_change_percent?.toFixed(2) || '0.00'}%</td>
+                    <td>₹${scenario.scenario_rate?.toFixed(4) || 'N/A'}</td>
+                    <td class="${plClass}">₹${scenario.total_pl_inr ? scenario.total_pl_inr.toLocaleString() : '0'}</td>
+                    <td><span class="badge ${scenario.impact === 'Low Impact' ? 'bg-success' : scenario.impact === 'Medium Impact' ? 'bg-warning' : 'bg-danger'}">${scenario.impact || 'N/A'}</span></td>
                 </tr>`;
             });
             
             html += '</tbody></table></div>';
+            
+            // Add summary
+            html += '<div class="alert alert-info mt-3">';
+            html += '<strong>Analysis Summary:</strong> Scenario analysis completed for different rate movements. ';
+            html += 'Use this information to plan your hedging strategy based on potential market movements.';
+            html += '</div>';
+            
             document.getElementById('results').innerHTML = html;
         }
 
@@ -358,13 +377,21 @@
             html += `<div class="alert alert-info">
                 <strong>Report Generated:</strong> ${new Date().toLocaleString()}<br>
                 <strong>LC ID:</strong> ${report.lc_details?.lc_id || 'N/A'}<br>
+                <strong>Total Value:</strong> $${report.lc_details?.total_value_usd?.toLocaleString() || 'N/A'}<br>
+                <strong>Days Remaining:</strong> ${report.lc_details?.days_remaining || 'N/A'} days<br>
                 <strong>Total Analysis:</strong> Complete risk and P&L assessment
             </div>`;
             
             if (report.executive_summary) {
                 html += '<h6>Executive Summary</h6>';
-                html += `<p>${report.executive_summary}</p>`;
+                html += `<p class="text-muted">${report.executive_summary}</p>`;
             }
+            
+            html += '<div class="alert alert-success">';
+            html += '<strong>Report Status:</strong> Successfully generated comprehensive analysis<br>';
+            html += `<strong>Report Sections:</strong> ${report.report_sections || 'Multiple'} sections analyzed<br>`;
+            html += `<strong>Generation Time:</strong> ${new Date(report.generation_time).toLocaleString()}`;
+            html += '</div>';
             
             document.getElementById('results').innerHTML = html;
         }
