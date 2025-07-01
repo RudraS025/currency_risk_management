@@ -111,12 +111,25 @@
                         <form id="plForm">
                             <div class="row mb-3">
                                 <div class="col-md-6">
+                                    <label for="lcNumber" class="form-label">LC Number</label>
+                                    <input type="text" class="form-control" id="lcNumber" value="DEMO-LC-001" required>
+                                </div>
+                                <div class="col-md-6">
                                     <label for="lcAmount" class="form-label">LC Amount (USD)</label>
                                     <input type="number" class="form-control" id="lcAmount" value="500000" required>
                                 </div>
+                            </div>
+                            <div class="row mb-3">
                                 <div class="col-md-6">
                                     <label for="contractRate" class="form-label">Contract Rate (INR per USD)</label>
                                     <input type="number" class="form-control" id="contractRate" value="82.50" step="0.01" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="businessType" class="form-label">Business Type</label>
+                                    <select class="form-control" id="businessType" required>
+                                        <option value="import">Import</option>
+                                        <option value="export">Export</option>
+                                    </select>
                                 </div>
                             </div>
                             <div class="row mb-3">
@@ -127,15 +140,6 @@
                                 <div class="col-md-6">
                                     <label for="maturityDate" class="form-label">Maturity Date</label>
                                     <input type="date" class="form-control" id="maturityDate" required>
-                                </div>
-                            </div>
-                            <div class="row mb-3">
-                                <div class="col-md-12">
-                                    <label for="businessType" class="form-label">Business Type</label>
-                                    <select class="form-control" id="businessType" required>
-                                        <option value="import">Import</option>
-                                        <option value="export">Export</option>
-                                    </select>
                                 </div>
                             </div>
                             <button type="submit" class="btn btn-primary btn-lg w-100">Calculate Backdated P&L</button>
@@ -243,6 +247,7 @@
             
             // Collect form data
             const formData = {
+                lc_id: document.getElementById('lcNumber').value,
                 lc_amount: parseFloat(document.getElementById('lcAmount').value),
                 lc_currency: 'USD',
                 contract_rate: parseFloat(document.getElementById('contractRate').value),
