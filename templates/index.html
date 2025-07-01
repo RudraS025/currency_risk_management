@@ -179,6 +179,23 @@
 
         // Load data on page load
         window.addEventListener('load', function() {
+            console.log('🚀 Page loaded, initializing...');
+            
+            // Set default dates
+            const today = new Date();
+            const twoMonthsAgo = new Date(today.getTime() - (60 * 24 * 60 * 60 * 1000)); // 60 days ago
+            const oneMonthAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000)); // 30 days ago
+            
+            const issueDateElement = document.getElementById('issueDate');
+            const maturityDateElement = document.getElementById('maturityDate');
+            
+            if (issueDateElement) {
+                issueDateElement.value = twoMonthsAgo.toISOString().split('T')[0];
+            }
+            if (maturityDateElement) {
+                maturityDateElement.value = oneMonthAgo.toISOString().split('T')[0];
+            }
+            
             checkHealth();
             loadCurrentRates();
         });
@@ -187,44 +204,83 @@
             try {
                 console.log('🔍 Checking system health...');
                 const response = await fetch('/api/health');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
                 const data = await response.json();
+                console.log('🏥 Health data:', data);
+                
+                const healthElement = document.getElementById('healthStatus');
+                const versionElement = document.getElementById('versionInfo');
+                const dataSourceElement = document.getElementById('dataSource');
                 
                 if (data.status === 'healthy') {
-                    document.getElementById('healthStatus').textContent = '✅ Online';
-                    document.getElementById('healthStatus').className = 'text-success';
-                    document.getElementById('versionInfo').textContent = data.version || 'Unknown';
-                    document.getElementById('dataSource').textContent = data.data_source || 'Unknown';
+                    if (healthElement) {
+                        healthElement.textContent = '✅ Online';
+                        healthElement.className = 'text-success';
+                    }
+                    if (versionElement) versionElement.textContent = data.version || 'Unknown';
+                    if (dataSourceElement) dataSourceElement.textContent = data.data_source || 'Unknown';
                 } else {
-                    document.getElementById('healthStatus').textContent = '❌ Issues';
-                    document.getElementById('healthStatus').className = 'text-danger';
+                    if (healthElement) {
+                        healthElement.textContent = '❌ Issues';
+                        healthElement.className = 'text-danger';
+                    }
                 }
             } catch (error) {
                 console.error('❌ Health check failed:', error);
-                document.getElementById('healthStatus').textContent = '❌ Offline';
-                document.getElementById('healthStatus').className = 'text-danger';
+                const healthElement = document.getElementById('healthStatus');
+                if (healthElement) {
+                    healthElement.textContent = '❌ Offline';
+                    healthElement.className = 'text-danger';
+                }
             }
         }
 
         async function loadCurrentRates() {
             try {
                 console.log('🔍 Loading current rates...');
-                document.getElementById('currentRate').textContent = 'Loading...';
-                document.getElementById('rateTimestamp').textContent = 'Fetching...';
+                const currentRateElement = document.getElementById('currentRate');
+                const timestampElement = document.getElementById('rateTimestamp');
+                
+                if (!currentRateElement || !timestampElement) {
+                    console.error('❌ Required elements not found');
+                    return;
+                }
+                
+                currentRateElement.textContent = 'Loading...';
+                timestampElement.textContent = 'Fetching latest rate...';
                 
                 const response = await fetch('/api/current-rates');
-                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
                 
-                if (data.usd_inr) {
-                    document.getElementById('currentRate').textContent = `₹${data.usd_inr.toFixed(4)}`;
-                    document.getElementById('rateTimestamp').textContent = `Updated: ${data.last_updated} (${data.source})`;
-                    document.getElementById('lastUpdate').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+                const data = await response.json();
+                console.log('📊 Current rates data:', data);
+                
+                if (data.usd_inr && data.usd_inr > 0) {
+                    currentRateElement.textContent = `₹${data.usd_inr.toFixed(4)}`;
+                    timestampElement.textContent = `Updated: ${data.last_updated || 'Now'} (${data.source || 'API'})`;
                 } else {
-                    throw new Error('No rate data received');
+                    // Fallback rate
+                    currentRateElement.textContent = '₹83.25';
+                    timestampElement.textContent = 'Fallback rate - API unavailable';
+                }
+                
+                // Update navbar timestamp
+                const lastUpdateElement = document.getElementById('lastUpdate');
+                if (lastUpdateElement) {
+                    lastUpdateElement.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
                 }
             } catch (error) {
                 console.error('❌ Error loading current rates:', error);
-                document.getElementById('currentRate').textContent = '₹83.25';
-                document.getElementById('rateTimestamp').textContent = 'Fallback rate - API unavailable';
+                const currentRateElement = document.getElementById('currentRate');
+                const timestampElement = document.getElementById('rateTimestamp');
+                
+                if (currentRateElement) currentRateElement.textContent = '₹83.25';
+                if (timestampElement) timestampElement.textContent = 'Fallback rate - API unavailable';
             }
         }
 
