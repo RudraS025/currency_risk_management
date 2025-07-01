@@ -270,15 +270,28 @@
                 const data = await response.json();
                 console.log('✅ P&L calculation result:', data);
                 
-                if (data.final_pl !== undefined) {
-                    // Display results
-                    const profitColor = data.final_pl >= 0 ? 'text-success' : 'text-danger';
-                    const profitIcon = data.final_pl >= 0 ? '📈' : '📉';
+                if (data.success && data.data) {
+                    // Extract values from correct response structure
+                    const plSummary = data.data.pl_summary;
+                    const riskMetrics = data.data.risk_metrics;
+                    const lcDetails = data.data.lc_details;
+                    const dailyPL = data.data.daily_pl;
+                    
+                    // Display results with correct field names
+                    const finalPL = plSummary.final_pl_inr;
+                    const maxProfit = plSummary.max_profit_inr;
+                    const maxLoss = plSummary.max_loss_inr;
+                    const var95 = riskMetrics.var_95_inr;
+                    const dataPoints = plSummary.total_data_points;
+                    const dataSource = plSummary.data_source;
+                    
+                    const profitColor = finalPL >= 0 ? 'text-success' : 'text-danger';
+                    const profitIcon = finalPL >= 0 ? '📈' : '📉';
                     
                     results.innerHTML = `
                         <div class="alert alert-success">
                             <h6>${profitIcon} Backdated LC Analysis Complete</h6>
-                            <p>Analysis based on real historical USD/INR exchange rates from ${data.analysis_period?.start} to ${data.analysis_period?.end}</p>
+                            <p>Analysis based on real historical USD/INR exchange rates from ${lcDetails.issue_date} to ${lcDetails.maturity_date}</p>
                         </div>
                         
                         <div class="row">
@@ -286,7 +299,7 @@
                                 <div class="card metric-card text-center">
                                     <div class="card-body">
                                         <h6>Final P&L</h6>
-                                        <h4 class="${profitColor}">₹${data.final_pl.toLocaleString()}</h4>
+                                        <h4 class="${profitColor}">₹${finalPL.toLocaleString()}</h4>
                                     </div>
                                 </div>
                             </div>
@@ -294,7 +307,7 @@
                                 <div class="card metric-card text-center">
                                     <div class="card-body">
                                         <h6>Max Profit</h6>
-                                        <h4 class="text-success">₹${data.max_profit.toLocaleString()}</h4>
+                                        <h4 class="text-success">₹${maxProfit.toLocaleString()}</h4>
                                     </div>
                                 </div>
                             </div>
@@ -302,7 +315,7 @@
                                 <div class="card metric-card text-center">
                                     <div class="card-body">
                                         <h6>Max Loss</h6>
-                                        <h4 class="text-danger">₹${data.max_loss.toLocaleString()}</h4>
+                                        <h4 class="text-danger">₹${maxLoss.toLocaleString()}</h4>
                                     </div>
                                 </div>
                             </div>
@@ -310,16 +323,41 @@
                                 <div class="card metric-card text-center">
                                     <div class="card-body">
                                         <h6>VaR (95%)</h6>
-                                        <h4>₹${data.var_95.toLocaleString()}</h4>
+                                        <h4 class="text-warning">₹${var95.toLocaleString()}</h4>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         
                         <div class="row mt-3">
-                            <div class="col-md-12">
+                            <div class="col-md-6">
                                 <div class="card">
-                                    <div class="card-header">
+                                    <div class="card-body">
+                                        <h6>Analysis Details</h6>
+                                        <p><strong>LC Number:</strong> ${lcDetails.lc_number}</p>
+                                        <p><strong>Amount:</strong> $${lcDetails.amount_usd.toLocaleString()}</p>
+                                        <p><strong>Contract Rate:</strong> ₹${lcDetails.contract_rate}</p>
+                                        <p><strong>Data Points:</strong> ${dataPoints} days</p>
+                                        <p><strong>Data Source:</strong> ${dataSource}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6>Risk Metrics</h6>
+                                        <p><strong>P&L Volatility:</strong> ₹${riskMetrics.pl_volatility_inr.toLocaleString()}</p>
+                                        <p><strong>Profit Days:</strong> ${riskMetrics.profit_days}/${dataPoints}</p>
+                                        <p><strong>Loss Days:</strong> ${riskMetrics.loss_days}/${dataPoints}</p>
+                                        <p><strong>Confidence Level:</strong> ${riskMetrics.confidence_level}%</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    resultsSection.style.display = 'block';
+                } else {
                                         <h6>Analysis Details</h6>
                                     </div>
                                     <div class="card-body">
@@ -339,7 +377,8 @@
                                 </div>
                             </div>
                         </div>
-                    `;
+                    
+                    resultsSection.style.display = 'block';
                 } else {
                     throw new Error(data.error || 'Calculation failed');
                 }
@@ -353,6 +392,7 @@
                         <p>Please check your inputs and try again.</p>
                     </div>
                 `;
+                resultsSection.style.display = 'block';
             }
         });
     </script>
