@@ -342,6 +342,23 @@ def calculate_backdated_pl():
         data = request.json
         logger.info(f"Received backdated P&L request: {data}")
         
+        # Map frontend fields to backend expected fields
+        # Frontend sends: lc_id, lc_amount, issue_date, maturity_date, contract_rate, business_type
+        # Backend expects: lc_number, amount_usd, issue_date, maturity_days, contract_rate
+        
+        # Convert frontend format to backend format
+        if 'lc_id' in data:
+            data['lc_number'] = data['lc_id']
+        if 'lc_amount' in data:
+            data['amount_usd'] = data['lc_amount']
+        
+        # Calculate maturity days from dates
+        if 'issue_date' in data and 'maturity_date' in data:
+            from datetime import datetime
+            issue_date = datetime.strptime(data['issue_date'], '%Y-%m-%d')
+            maturity_date = datetime.strptime(data['maturity_date'], '%Y-%m-%d')
+            data['maturity_days'] = (maturity_date - issue_date).days
+        
         # Validate required fields
         required_fields = ['lc_number', 'amount_usd', 'issue_date', 'maturity_days', 'contract_rate']
         for field in required_fields:
