@@ -260,9 +260,12 @@
                 const data = await response.json();
                 console.log('📊 Current rates data:', data);
                 
-                if (data.usd_inr && data.usd_inr > 0) {
-                    currentRateElement.textContent = `₹${data.usd_inr.toFixed(4)}`;
-                    timestampElement.textContent = `Updated: ${data.last_updated || 'Now'} (${data.source || 'API'})`;
+                // Handle both 'rate' and 'usd_inr' field names for compatibility
+                const currentRate = data.rate || data.usd_inr;
+                
+                if (currentRate && currentRate > 0) {
+                    currentRateElement.textContent = `₹${currentRate.toFixed(4)}`;
+                    timestampElement.textContent = `Updated: ${data.timestamp || data.last_updated || 'Now'} (${data.source || 'API'})`;
                 } else {
                     // Fallback rate
                     currentRateElement.textContent = '₹83.25';
@@ -411,28 +414,6 @@
                             </div>
                         </div>
                     `;
-                    
-                    resultsSection.style.display = 'block';
-                } else {
-                                        <h6>Analysis Details</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="row">
-                                            <div class="col-md-6">
-                                                <p><strong>LC Amount:</strong> $${formData.lc_amount.toLocaleString()}</p>
-                                                <p><strong>Contract Rate:</strong> ₹${formData.contract_rate}</p>
-                                                <p><strong>Business Type:</strong> ${formData.business_type.toUpperCase()}</p>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <p><strong>Data Points:</strong> ${data.daily_data_points} days</p>
-                                                <p><strong>Data Source:</strong> ${data.data_source}</p>
-                                                <p><strong>Analysis Type:</strong> Historical Backdated</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                     
                     resultsSection.style.display = 'block';
                 } else {
