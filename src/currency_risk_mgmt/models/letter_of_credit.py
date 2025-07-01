@@ -25,6 +25,7 @@ class LetterOfCredit:
         signing_date: Date when LC was signed
         maturity_days: Number of days until LC maturity
         customer_country: Country of the importing customer
+        contract_rate: Exchange rate (USD/INR) at the time of signing
         incoterm: International commercial term (FOB, CIF, etc.)
         port_of_loading: Port where goods will be loaded
         port_of_discharge: Port where goods will be discharged
@@ -40,6 +41,7 @@ class LetterOfCredit:
     signing_date: str  # Format: YYYY-MM-DD
     maturity_days: int
     customer_country: str
+    contract_rate: float = 84.15  # USD/INR exchange rate at signing (default current rate)
     incoterm: str = "FOB"
     port_of_loading: Optional[str] = None
     port_of_discharge: Optional[str] = None
@@ -82,6 +84,11 @@ class LetterOfCredit:
     @property
     def signing_date_obj(self) -> datetime:
         """Get signing date as datetime object."""
+        return self._signing_date
+    
+    @property
+    def issue_date(self) -> datetime:
+        """Get issue date as datetime object (alias for signing_date_obj)."""
         return self._signing_date
     
     @property
@@ -132,6 +139,7 @@ class LetterOfCredit:
             'signing_date': self.signing_date,
             'maturity_days': self.maturity_days,
             'customer_country': self.customer_country,
+            'contract_rate': self.contract_rate,
             'incoterm': self.incoterm,
             'port_of_loading': self.port_of_loading,
             'port_of_discharge': self.port_of_discharge,

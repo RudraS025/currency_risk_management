@@ -367,13 +367,13 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Set default dates - Use historical dates for meaningful P&L analysis
-        // Set issue date to 4 months ago to get rich historical data
-        const issueDate = new Date('2024-01-01'); // Historical date with good data
+        // Set default dates - Use actual 2025 LC dates for real market data analysis
+        // Set issue date to June 16, 2025 (start of real forward rates data)
+        const issueDate = new Date('2025-06-16'); // Real LC issue date with actual market data
         document.getElementById('issueDate').value = issueDate.toISOString().split('T')[0];
         
-        // Set maturity date to a historical date that provides complete analysis
-        const maturityDate = new Date('2024-04-01'); // 3 months after issue
+        // Set maturity date to September 16, 2025 (end of real forward rates data)
+        const maturityDate = new Date('2025-09-16'); // Real LC maturity date with actual market data
         document.getElementById('maturityDate').value = maturityDate.toISOString().split('T')[0];
 
         // Load current rates on page load
@@ -461,7 +461,8 @@
         });
 
         function displayResults(data) {
-            const { pl_result, risk_metrics } = data;
+            const pl_result = data.data || data.pl_result || {};
+            const risk_metrics = data.risk_metrics || {};
             
             let html = '<div class="row">';
             
@@ -543,8 +544,9 @@
             document.getElementById('results').innerHTML = html;
             
             // Display P&L chart if chart data is available
-            if (pl_result.chart_data && pl_result.chart_data.length > 0) {
-                displayPLChart(pl_result.chart_data, pl_result.max_profit_date, pl_result.max_loss_date);
+            const chartData = pl_result.daily_pl || pl_result.chart_data || [];
+            if (chartData && chartData.length > 0) {
+                displayPLChart(chartData, pl_result.max_profit_date, pl_result.max_loss_date);
                 document.getElementById('chartContainer').style.display = 'block';
             } else {
                 document.getElementById('chartContainer').style.display = 'none';
@@ -563,13 +565,14 @@
             
             // Prepare data for Chart.js
             const labels = chartData.map(item => item.date);
-            const data = chartData.map(item => item.pl);
+            const data = chartData.map(item => item.pl_amount || item.pl || 0);
             
             // Create color array - highlight max profit and loss dates
             const backgroundColors = chartData.map(item => {
+                const plValue = item.pl_amount || item.pl || 0;
                 if (item.date === maxProfitDate) return 'rgba(40, 167, 69, 0.8)';  // Green for max profit
                 if (item.date === maxLossDate) return 'rgba(220, 53, 69, 0.8)';    // Red for max loss
-                return item.pl >= 0 ? 'rgba(40, 167, 69, 0.6)' : 'rgba(220, 53, 69, 0.6)';
+                return plValue >= 0 ? 'rgba(40, 167, 69, 0.6)' : 'rgba(220, 53, 69, 0.6)';
             });
             
             plChart = new Chart(ctx, {

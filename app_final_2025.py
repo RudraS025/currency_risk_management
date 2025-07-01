@@ -141,20 +141,7 @@ def calculate_pl():
                     
                     return jsonify({
                         'success': True,
-                        'data': {
-                            'total_pl_inr': final_pl.pl_amount,
-                            'spot_rate': final_pl.forward_rate,
-                            'original_rate': lc.contract_rate,
-                            'pl_percentage': final_pl.pl_percentage,
-                            'days_remaining': final_pl.days_to_maturity,
-                            'max_profit': risk_metrics.get('max_profit', final_pl.pl_amount),
-                            'max_loss': risk_metrics.get('max_loss', final_pl.pl_amount),
-                            'max_profit_date': optimal_dates.get('max_profit', ('', 0))[0],
-                            'max_loss_date': optimal_dates.get('max_loss', ('', 0))[0],
-                            'volatility': risk_metrics.get('rate_volatility', 0),
-                            'daily_pl': chart_data,
-                            'data_source': 'Real_2025_Market_Data'
-                        },
+                        'pl_result': formatted_result,
                         'risk_metrics': formatted_risk,
                         'real_2025_data': True,
                         'timestamp': datetime.now().isoformat()
@@ -187,7 +174,7 @@ def calculate_pl():
                 'max_profit_date': summary.get('max_profit_date', ''),
                 'max_loss_date': summary.get('max_loss_date', ''),
                 'volatility': summary.get('volatility', 0),
-                'daily_pl': result.get('chart_data', []),
+                'chart_data': result.get('chart_data', []),
                 'data_source': 'Historical_Synthetic_Data'
             }
             print(f"📊 DEBUG: Using historical P&L: ₹{formatted_result['total_pl_inr']:,.2f}", flush=True)
@@ -203,7 +190,7 @@ def calculate_pl():
                 'original_rate': spot_result.get('signing_rate', 85.0),
                 'pl_percentage': spot_result.get('pl_percentage', 0),
                 'days_remaining': lc.days_remaining,
-                'daily_pl': [],
+                'chart_data': [],
                 'data_source': 'Fallback_Spot_Data'
             }
         
@@ -219,7 +206,7 @@ def calculate_pl():
         
         return jsonify({
             'success': True,
-            'data': formatted_result,
+            'pl_result': formatted_result,
             'risk_metrics': formatted_risk,
             'real_2025_data': False,
             'timestamp': datetime.now().isoformat()
