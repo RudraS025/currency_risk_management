@@ -4,7 +4,6 @@ Focus: Backdated LCs with real historical USD/INR data
 """
 
 from flask import Flask, render_template, request, jsonify
-from flask_cors import CORS
 from datetime import datetime, timedelta
 import yfinance as yf
 import pandas as pd
@@ -18,7 +17,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
 
 class BackdatedLC:
     """Letter of Credit model for backdated analysis with real historical data"""
@@ -212,17 +210,7 @@ class BackdatedPLCalculator:
 @app.route('/')
 def index():
     """Main dashboard for backdated LC analysis"""
-    return render_template('index.html')
-
-@app.route('/fixed')
-def index_fixed():
-    """Fixed version of the dashboard"""
-    return render_template('index_fixed.html')
-
-@app.route('/test')
-def test_page():
-    """Test page for debugging API calls"""
-    return render_template('test.html')
+    return render_template('index_v2.html')
 
 @app.route('/api/health')
 def health_check():
@@ -234,106 +222,6 @@ def health_check():
         'data_source': 'Yahoo Finance + Fallback',
         'timestamp': datetime.now().isoformat()
     })
-
-@app.route('/api/current-rates')
-def get_current_rates():
-    """Get current USD/INR rates using Yahoo Finance"""
-    try:
-        logger.info("Fetching current USD/INR rate")
-        ticker = yf.Ticker("USDINR=X")
-        current_data = ticker.history(period="1d")
-        
-        if not current_data.empty:
-            rate = current_data['Close'].iloc[-1]
-            logger.info(f"Successfully fetched current rate: {rate:.4f}")
-            return jsonify({
-                'success': True,
-                'rate': round(rate, 4),
-                'timestamp': datetime.now().isoformat(),
-                'source': 'Yahoo Finance'
-            })
-        else:
-            logger.warning("No current data found, using fallback rate")
-            # Fallback rate
-            return jsonify({
-                'success': True,
-                'rate': 83.25,
-                'timestamp': datetime.now().isoformat(),
-                'source': 'Fallback'
-            })
-    except Exception as e:
-        logger.error(f"Error fetching current rates: {e}")
-        # Return fallback on any error
-        return jsonify({
-            'success': True,
-            'rate': 83.25,
-            'timestamp': datetime.now().isoformat(),
-            'source': 'Fallback (Error)',
-            'error_message': str(e)
-        })
-
-@app.route('/api/calculate-pl', methods=['POST'])
-def calculate_pl():
-    """Calculate P&L for backdated LC using real historical data"""
-    try:
-        data = request.json
-        logger.info(f"Received P&L request: {data}")
-        
-        # Validate required fields
-        required_fields = ['lc_number', 'amount_usd', 'issue_date', 'maturity_days', 'contract_rate']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({'success': False, 'error': f'Missing required field: {field}'}), 400
-        
-        # Create backdated LC
-        lc = BackdatedLC(
-            lc_number=data['lc_number'],
-            amount_usd=float(data['amount_usd']),
-            issue_date=data['issue_date'],
-            maturity_days=int(data['maturity_days']),
-            beneficiary=data.get('beneficiary', 'Exporter'),
-            commodity=data.get('commodity', 'General Export')
-        )
-        
-        # Calculate P&L
-        calculator = BackdatedPLCalculator()
-        result = calculator.calculate_daily_pl(lc, float(data['contract_rate']))
-        
-        if 'error' in result:
-            return jsonify({'success': False, 'error': result['error']}), 500
-        
-        # Format response for backward compatibility
-        pl_summary = result['pl_summary']
-        risk_metrics = result['risk_metrics']
-        
-        return jsonify({
-            'success': True,
-            'data': {
-                'total_pl_inr': pl_summary['final_pl_inr'],
-                'spot_rate': result['daily_pl'][-1]['market_rate'] if result['daily_pl'] else 83.0,
-                'original_rate': result['lc_details']['contract_rate'],
-                'pl_percentage': result['daily_pl'][-1]['pl_percentage'] if result['daily_pl'] else 0,
-                'days_remaining': 0,  # Backdated, so always 0
-                'max_profit': pl_summary['max_profit_inr'],
-                'max_loss': pl_summary['max_loss_inr'],
-                'daily_pl': result['daily_pl'],
-                'data_source': pl_summary['data_source']
-            },
-            'risk_metrics': {
-                'var_95': risk_metrics['var_95_inr'],
-                'volatility': round((risk_metrics['pl_volatility_inr'] / pl_summary['final_pl_inr']) * 100, 2) if pl_summary['final_pl_inr'] != 0 else 0,
-                'confidence_level': risk_metrics['confidence_level']
-            },
-            'real_2025_data': False,
-            'backdated_analysis': True,
-            'timestamp': datetime.now().isoformat()
-        })
-        
-    except ValueError as e:
-        return jsonify({'success': False, 'error': str(e)}), 400
-    except Exception as e:
-        logger.error(f"Error calculating P&L: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/calculate-backdated-pl', methods=['POST'])
 def calculate_backdated_pl():
@@ -377,165 +265,6 @@ def calculate_backdated_pl():
         logger.error(f"Error calculating backdated P&L: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/scenario-analysis', methods=['POST'])
-def scenario_analysis():
-    """Perform scenario analysis on backdated LC"""
-    try:
-        data = request.json
-        
-        # Create backdated LC
-        lc = BackdatedLC(
-            lc_number=data.get('lc_number', 'SCENARIO-LC-001'),
-            amount_usd=float(data['amount_usd']),
-            issue_date=data['issue_date'],
-            maturity_days=int(data['maturity_days']),
-            beneficiary=data.get('beneficiary', 'Exporter'),
-            commodity=data.get('commodity', 'General Export')
-        )
-        
-        contract_rate = float(data.get('contract_rate', 82.5))
-        
-        # Calculate base P&L
-        calculator = BackdatedPLCalculator()
-        base_result = calculator.calculate_daily_pl(lc, contract_rate)
-        
-        if 'error' in base_result:
-            return jsonify({'success': False, 'error': base_result['error']}), 500
-        
-        base_pl = base_result['pl_summary']['final_pl_inr']
-        
-        # Create scenarios with different contract rates
-        scenarios = [
-            {'name': 'Optimistic Contract Rate', 'rate_change': -0.02},  # Better rate for exporter
-            {'name': 'Base Case', 'rate_change': 0.0},
-            {'name': 'Conservative Contract Rate', 'rate_change': 0.02},  # Worse rate for exporter
-            {'name': 'Best Case Scenario', 'rate_change': -0.05},
-            {'name': 'Worst Case Scenario', 'rate_change': 0.05}
-        ]
-        
-        scenario_results = []
-        for scenario in scenarios:
-            scenario_contract_rate = contract_rate * (1 + scenario['rate_change'])
-            scenario_result = calculator.calculate_daily_pl(lc, scenario_contract_rate)
-            
-            if 'error' not in scenario_result:
-                scenario_pl = scenario_result['pl_summary']['final_pl_inr']
-                
-                scenario_results.append({
-                    'name': scenario['name'],
-                    'rate_change': scenario['rate_change'],
-                    'new_rate': scenario_contract_rate,
-                    'pl_inr': scenario_pl,
-                    'impact': 'High Impact' if abs(scenario_pl - base_pl) > 100000 else 'Medium Impact'
-                })
-        
-        return jsonify({
-            'success': True,
-            'scenarios': scenario_results,
-            'base_pl': base_pl,
-            'current_rate': contract_rate,
-            'timestamp': datetime.now().isoformat()
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/generate-report', methods=['POST'])
-def generate_report():
-    """Generate comprehensive report for backdated LC"""
-    try:
-        data = request.json
-        
-        # Create backdated LC
-        lc = BackdatedLC(
-            lc_number=data.get('lc_number', 'REPORT-LC-001'),
-            amount_usd=float(data['amount_usd']),
-            issue_date=data['issue_date'],
-            maturity_days=int(data['maturity_days']),
-            beneficiary=data.get('beneficiary', 'Exporter'),
-            commodity=data.get('commodity', 'General Export')
-        )
-        
-        contract_rate = float(data.get('contract_rate', 82.5))
-        
-        # Calculate P&L
-        calculator = BackdatedPLCalculator()
-        result = calculator.calculate_daily_pl(lc, contract_rate)
-        
-        if 'error' in result:
-            return jsonify({'success': False, 'error': result['error']}), 500
-        
-        pl_summary = result['pl_summary']
-        
-        report = {
-            'success': True,
-            'report': {
-                'lc_id': lc.lc_number,
-                'total_value': f"${lc.amount_usd:,.2f}",
-                'days_remaining': "0 days (Matured)",
-                'current_pl': f"₹{pl_summary['final_pl_inr']:,.2f}",
-                'status': 'Successfully generated backdated analysis',
-                'executive_summary': f'Backdated LC analysis for {lc.commodity} export worth ${lc.amount_usd:,.2f}. Final P&L shows {"profit" if pl_summary["final_pl_inr"] > 0 else "loss"} of ₹{abs(pl_summary["final_pl_inr"]):,.2f} based on real historical market data.',
-                'generation_time': datetime.now().isoformat(),
-                'report_sections': ['Executive Summary', 'Historical P&L Analysis', 'Risk Assessment', 'Market Performance'],
-                'data_source': pl_summary['data_source'],
-                'analysis_period': f"{result['lc_details']['issue_date']} to {result['lc_details']['maturity_date']}"
-            },
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        return jsonify(report)
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/forward-rates')
-def get_forward_rates():
-    """Get forward rates information"""
-    try:
-        logger.info("Fetching forward rates information")
-        return jsonify({
-            'success': True,
-            'data': {
-                'provider': 'Yahoo_Finance_Historical',
-                'coverage': {'message': 'Historical USD/INR rates available from 2010 onwards'},
-                'sample_rates': {
-                    '2024-06-01': 83.15,
-                    '2024-05-01': 83.42,
-                    '2024-04-01': 83.28,
-                    '2024-03-01': 82.89,
-                    '2023-12-01': 82.75
-                },
-                'currency_pair': 'USD/INR',
-                'reliability': 'High'
-            },
-            'timestamp': datetime.now().isoformat()
-        })
-    except Exception as e:
-        logger.error(f"Error in forward rates endpoint: {e}")
-        return jsonify({
-            'success': True,
-            'data': {
-                'provider': 'Fallback',
-                'coverage': {'message': 'Basic historical rates available'},
-                'sample_rates': {
-                    '2024-06-01': 83.15,
-                    '2024-05-01': 83.42,
-                    '2024-04-01': 83.28
-                },
-                'currency_pair': 'USD/INR',
-                'reliability': 'Medium'
-            },
-            'error': str(e),
-            'timestamp': datetime.now().isoformat()
-        })
-
 @app.route('/api/validate-dates', methods=['POST'])
 def validate_dates():
     """Validate that dates are suitable for backdated analysis"""
@@ -564,9 +293,8 @@ def validate_dates():
         return jsonify({'success': False, 'error': str(e)}), 400
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    debug_mode = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+    port = int(os.environ.get('PORT', 5001))  # Use different port for testing
     print(f"🚀 Starting Currency Risk Management System v2.0 (Backdated LC Focus)")
     print(f"📊 Historical data source: Yahoo Finance + Fallback")
     print(f"🎯 Focus: Real historical USD/INR analysis")
-    app.run(host='0.0.0.0', port=port, debug=debug_mode)
+    app.run(host='0.0.0.0', port=port, debug=True)

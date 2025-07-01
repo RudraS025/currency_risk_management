@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Currency Risk Management System</title>
+    <title>Currency Risk Management System - Backdated LC Analysis</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -250,7 +250,7 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
-            <a class="navbar-brand" href="#">Currency Risk Management</a>
+            <a class="navbar-brand" href="#">Currency Risk Management - Backdated LC Analysis</a>
             <div class="navbar-nav ms-auto">
                 <span class="navbar-text" id="lastUpdate">Loading...</span>
             </div>
@@ -274,10 +274,10 @@
             <div class="col-md-6">
                 <div class="card dashboard-card">
                     <div class="card-header">
-                        <h5>Forward Rates</h5>
+                        <h5>Historical Data Coverage</h5>
                     </div>
                     <div class="card-body">
-                        <div id="forwardRates">Loading forward rates...</div>
+                        <div id="forwardRates">Loading historical data info...</div>
                     </div>
                 </div>
             </div>
@@ -288,7 +288,8 @@
             <div class="col-md-12">
                 <div class="card">
                     <div class="card-header">
-                        <h5>P&L Calculator</h5>
+                        <h5>Backdated LC P&L Calculator</h5>
+                        <small class="text-light">Analyze Letters of Credit using real historical USD/INR data</small>
                     </div>
                     <div class="card-body">
                         <form id="plCalculatorForm">
@@ -306,8 +307,12 @@
                                     <input type="date" class="form-control" id="issueDate">
                                 </div>
                                 <div class="col-md-3">
-                                    <label for="maturityDate" class="form-label">Maturity Date</label>
-                                    <input type="date" class="form-control" id="maturityDate">
+                                    <label for="maturityDays" class="form-label">Maturity Period (Days)</label>
+                                    <input type="number" class="form-control" id="maturityDays" value="60" min="1" max="365">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="contractRate" class="form-label">Contract Rate (INR per USD)</label>
+                                    <input type="number" class="form-control" id="contractRate" value="82.5" step="0.01">
                                 </div>
                             </div>
                             <div class="row mt-3">
@@ -320,12 +325,11 @@
                                     <input type="text" class="form-control" id="beneficiary" value="Export Company">
                                 </div>
                                 <div class="col-md-4">
-                                    <div class="form-check mt-4">
-                                        <input class="form-check-input" type="checkbox" id="useForwardRates" checked>
-                                        <label class="form-check-label" for="useForwardRates">
-                                            Use Forward Rates (Recommended for meaningful P&L analysis)
-                                        </label>
-                                    </div>
+                                    <label for="analysisType" class="form-label">Analysis Type</label>
+                                    <select class="form-select" id="analysisType">
+                                        <option value="backdated">Backdated LC Analysis</option>
+                                        <option value="scenario">Scenario Analysis</option>
+                                    </select>
                                 </div>
                             </div>
                             <div class="row mt-3">
@@ -350,7 +354,17 @@
                     </div>
                     <div class="card-body">
                         <div id="results">
-                            <p class="text-muted">Enter trade details above and click "Calculate P&L" to see results.</p>
+                            <div class="alert alert-info">
+                                <h6>🎯 Backdated LC Analysis</h6>
+                                <p class="mb-2">This system analyzes Letters of Credit with <strong>past maturity dates</strong> using real historical USD/INR exchange rates.</p>
+                                <p class="mb-1"><strong>How it works:</strong></p>
+                                <ul class="mb-0">
+                                    <li>Enter LC details with dates in the past</li>
+                                    <li>System fetches real historical USD/INR rates from Yahoo Finance</li>
+                                    <li>Calculate actual P&L that would have occurred</li>
+                                    <li>Analyze risk metrics based on real market data</li>
+                                </ul>
+                            </div>
                         </div>
                         <!-- Daily P&L Chart Container -->
                         <div id="chartContainer" style="display: none; margin-top: 20px;">
@@ -367,14 +381,14 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Set default dates - Use actual 2025 LC dates for real market data analysis
-        // Set issue date to June 16, 2025 (start of real forward rates data)
-        const issueDate = new Date('2025-06-16'); // Real LC issue date with actual market data
+        // Set default dates for backdated LC analysis
+        // Issue date: 90 days ago for realistic backdated analysis
+        const issueDate = new Date();
+        issueDate.setDate(issueDate.getDate() - 90);
         document.getElementById('issueDate').value = issueDate.toISOString().split('T')[0];
         
-        // Set maturity date to September 16, 2025 (end of real forward rates data)
-        const maturityDate = new Date('2025-09-16'); // Real LC maturity date with actual market data
-        document.getElementById('maturityDate').value = maturityDate.toISOString().split('T')[0];
+        // Set default maturity days
+        document.getElementById('maturityDays').value = 60;
 
         // Load current rates on page load
         loadCurrentRates();
@@ -388,56 +402,112 @@
 
         async function loadCurrentRates() {
             try {
+                console.log('🔍 Loading current rates...');
+                document.getElementById('currentRate').textContent = 'Loading...';
+                document.getElementById('rateTimestamp').textContent = 'Fetching...';
+                
                 const response = await fetch('/api/current-rates');
                 const data = await response.json();
+                console.log('✅ Current rates response:', data);
                 
-                if (data.success) {
+                if (data.success && data.rate) {
                     document.getElementById('currentRate').textContent = `₹${data.rate.toFixed(4)}`;
-                    document.getElementById('rateTimestamp').textContent = `Updated: ${new Date(data.timestamp).toLocaleString()}`;
+                    document.getElementById('rateTimestamp').textContent = `Updated: ${new Date(data.timestamp).toLocaleString()} (${data.source})`;
                 } else {
-                    document.getElementById('currentRate').textContent = 'Error';
-                    document.getElementById('rateTimestamp').textContent = data.error;
+                    document.getElementById('currentRate').textContent = '₹83.25';
+                    document.getElementById('rateTimestamp').textContent = 'Fallback rate (API issue)';
                 }
             } catch (error) {
-                document.getElementById('currentRate').textContent = 'Error';
-                document.getElementById('rateTimestamp').textContent = 'Failed to fetch rates';
+                console.error('❌ Error loading current rates:', error);
+                document.getElementById('currentRate').textContent = '₹83.25';
+                document.getElementById('rateTimestamp').textContent = `Error: ${error.message}`;
             }
         }
 
         async function loadForwardRates() {
             try {
+                console.log('🔍 Loading historical data info...');
+                document.getElementById('forwardRates').innerHTML = 'Loading...';
+                
                 const response = await fetch('/api/forward-rates');
                 const data = await response.json();
+                console.log('✅ Forward rates response:', data);
                 
-                if (data.success) {
-                    let html = '';
-                    Object.entries(data.rates).forEach(([period, rate]) => {
-                        html += `<div class="d-flex justify-content-between"><span>${period}:</span><span>₹${rate.toFixed(4)}</span></div>`;
+                if (data.success && data.data) {
+                    let html = '<div class="text-success">✓ Historical Data Available</div>';
+                    html += `<small class="text-muted">Coverage: ${data.data.coverage.message}</small><br>`;
+                    html += `<small class="text-muted">Source: ${data.data.provider}</small><br>`;
+                    html += '<div class="mt-2"><strong>Sample Rates:</strong></div>';
+                    
+                    Object.entries(data.data.sample_rates).forEach(([date, rate]) => {
+                        html += `<div class="d-flex justify-content-between"><span>${date}:</span><span>₹${rate.toFixed(4)}</span></div>`;
                     });
+                    
                     document.getElementById('forwardRates').innerHTML = html;
                 } else {
-                    document.getElementById('forwardRates').innerHTML = '<div class="text-danger">Error loading forward rates</div>';
+                    document.getElementById('forwardRates').innerHTML = '<div class="text-warning">Historical data available with fallback</div>';
                 }
             } catch (error) {
-                document.getElementById('forwardRates').innerHTML = '<div class="text-danger">Failed to fetch forward rates</div>';
+                console.error('❌ Error loading forward rates:', error);
+                document.getElementById('forwardRates').innerHTML = `<div class="text-danger">Error: ${error.message}</div>`;
             }
         }
 
         document.getElementById('plCalculatorForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
+            console.log('🚀 P&L Form submitted');
+            
             const resultsDiv = document.getElementById('results');
-            resultsDiv.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><p>Calculating P&L...</p></div>';
+            resultsDiv.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><p>Calculating P&L using historical data...</p></div>';
+            
+            // Validate dates first
+            const issueDate = document.getElementById('issueDate').value;
+            const maturityDays = parseInt(document.getElementById('maturityDays').value);
+            
+            console.log('📅 Form data:', { issueDate, maturityDays });
+            
+            try {
+                console.log('🔍 Validating dates...');
+                const dateValidation = await fetch('/api/validate-dates', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        issue_date: issueDate,
+                        maturity_days: maturityDays
+                    })
+                });
+                
+                const validationResult = await dateValidation.json();
+                console.log('✅ Date validation result:', validationResult);
+                
+                if (!validationResult.success || !validationResult.validation.is_backdated) {
+                    console.log('❌ Date validation failed');
+                    resultsDiv.innerHTML = `<div class="alert alert-warning">
+                        <h6>Invalid Dates for Backdated Analysis</h6>
+                        <p>For backdated LC analysis, both issue date and maturity date must be in the past.</p>
+                        <p>Maturity date: ${validationResult.validation.maturity_date}</p>
+                        <p>Please adjust your dates and try again.</p>
+                    </div>`;
+                    return;
+                }
+            } catch (error) {
+                console.error('❌ Date validation error:', error);
+            }
             
             const formData = {
                 lc_number: document.getElementById('lcNumber').value,
                 amount_usd: parseFloat(document.getElementById('amountUsd').value),
-                issue_date: document.getElementById('issueDate').value,
-                maturity_date: document.getElementById('maturityDate').value,
+                issue_date: issueDate,
+                maturity_days: maturityDays,
+                contract_rate: parseFloat(document.getElementById('contractRate').value),
                 commodity: document.getElementById('commodity').value,
-                beneficiary: document.getElementById('beneficiary').value,
-                use_forward_rates: document.getElementById('useForwardRates').checked
+                beneficiary: document.getElementById('beneficiary').value
             };
+
+            console.log('📊 Submitting P&L request:', formData);
 
             try {
                 const response = await fetch('/api/calculate-pl', {
@@ -449,18 +519,24 @@
                 });
 
                 const data = await response.json();
+                console.log('✅ P&L response received:', data);
                 
                 if (data.success) {
+                    console.log('🎉 Displaying P&L results');
                     displayResults(data);
                 } else {
+                    console.error('❌ P&L calculation failed:', data.error);
                     resultsDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
                 }
             } catch (error) {
+                console.error('❌ P&L calculation error:', error);
                 resultsDiv.innerHTML = `<div class="alert alert-danger">Failed to calculate P&L: ${error.message}</div>`;
             }
         });
 
         function displayResults(data) {
+            console.log('Displaying results:', data);
+            
             const pl_result = data.data || data.pl_result || {};
             const risk_metrics = data.risk_metrics || {};
             
@@ -468,9 +544,17 @@
             
             // P&L Results
             html += '<div class="col-md-6"><h6>P&L Summary</h6><ul class="list-group">';
+            
+            // Show data source
+            if (pl_result.data_source) {
+                html += `<li class="list-group-item d-flex justify-content-between">
+                    <span>Data Source:</span><span class="text-info">${pl_result.data_source}</span>
+                </li>`;
+            }
+            
             if (pl_result.total_pl_inr !== undefined) {
                 html += `<li class="list-group-item d-flex justify-content-between">
-                    <span>Total P&L (INR):</span>
+                    <span>Final P&L (INR):</span>
                     <span class="${pl_result.total_pl_inr >= 0 ? 'text-success' : 'text-danger'}">
                         ₹${pl_result.total_pl_inr.toLocaleString()}
                     </span>
@@ -478,12 +562,12 @@
             }
             if (pl_result.spot_rate) {
                 html += `<li class="list-group-item d-flex justify-content-between">
-                    <span>Current Rate:</span><span>₹${pl_result.spot_rate.toFixed(4)}</span>
+                    <span>Final Market Rate:</span><span>₹${pl_result.spot_rate.toFixed(4)}</span>
                 </li>`;
             }
             if (pl_result.original_rate) {
                 html += `<li class="list-group-item d-flex justify-content-between">
-                    <span>Original Rate:</span><span>₹${pl_result.original_rate.toFixed(4)}</span>
+                    <span>Contract Rate:</span><span>₹${pl_result.original_rate.toFixed(4)}</span>
                 </li>`;
             }
             if (pl_result.pl_percentage !== undefined) {
@@ -494,9 +578,11 @@
                     </span>
                 </li>`;
             }
-            if (pl_result.days_remaining !== undefined) {
+            
+            // Show backdated specific info
+            if (data.backdated_analysis) {
                 html += `<li class="list-group-item d-flex justify-content-between">
-                    <span>Days Remaining:</span><span>${pl_result.days_remaining} days</span>
+                    <span>Analysis Type:</span><span class="text-primary">Backdated LC</span>
                 </li>`;
             }
             
@@ -513,15 +599,47 @@
                     <span class="text-danger">₹${pl_result.max_loss.toLocaleString()}</span>
                 </li>`;
             }
-            if (pl_result.volatility !== undefined) {
-                html += `<li class="list-group-item d-flex justify-content-between">
-                    <span>P&L Volatility:</span><span>₹${pl_result.volatility.toLocaleString()}</span>
-                </li>`;
-            }
             html += '</ul></div>';
             
             // Risk Metrics
             html += '<div class="col-md-6"><h6>Risk Metrics</h6><ul class="list-group">';
+            if (risk_metrics.var_95 !== undefined) {
+                html += `<li class="list-group-item d-flex justify-content-between">
+                    <span>VaR (95%):</span><span class="text-warning">₹${risk_metrics.var_95.toLocaleString()}</span>
+                </li>`;
+            }
+            if (risk_metrics.volatility !== undefined) {
+                html += `<li class="list-group-item d-flex justify-content-between">
+                    <span>Volatility:</span><span>${risk_metrics.volatility.toFixed(2)}%</span>
+                </li>`;
+            }
+            if (risk_metrics.confidence_level !== undefined) {
+                html += `<li class="list-group-item d-flex justify-content-between">
+                    <span>Confidence Level:</span><span>${risk_metrics.confidence_level}%</span>
+                </li>`;
+            }
+            
+            // Show daily data points count
+            const chartData = pl_result.daily_pl || [];
+            if (chartData.length > 0) {
+                html += `<li class="list-group-item d-flex justify-content-between">
+                    <span>Historical Data Points:</span><span class="text-info">${chartData.length} days</span>
+                </li>`;
+            }
+            
+            html += '</ul></div>';
+            html += '</div>';
+            
+            document.getElementById('results').innerHTML = html;
+            
+            // Display P&L chart if chart data is available
+            if (chartData && chartData.length > 0) {
+                displayPLChart(chartData, pl_result.max_profit_date, pl_result.max_loss_date);
+                document.getElementById('chartContainer').style.display = 'block';
+            } else {
+                document.getElementById('chartContainer').style.display = 'none';
+            }
+        }
             if (risk_metrics.var_95 !== undefined) {
                 html += `<li class="list-group-item d-flex justify-content-between">
                     <span>VaR (95%):</span><span class="text-warning">₹${risk_metrics.var_95.toLocaleString()}</span>
@@ -563,13 +681,13 @@
                 plChart.destroy();
             }
             
-            // Prepare data for Chart.js
+            // Prepare data for Chart.js - handle both old and new data structures
             const labels = chartData.map(item => item.date);
-            const data = chartData.map(item => item.pl_amount || item.pl || 0);
+            const data = chartData.map(item => item.daily_pl_inr || item.pl_amount || item.pl || 0);
             
             // Create color array - highlight max profit and loss dates
             const backgroundColors = chartData.map(item => {
-                const plValue = item.pl_amount || item.pl || 0;
+                const plValue = item.daily_pl_inr || item.pl_amount || item.pl || 0;
                 if (item.date === maxProfitDate) return 'rgba(40, 167, 69, 0.8)';  // Green for max profit
                 if (item.date === maxLossDate) return 'rgba(220, 53, 69, 0.8)';    // Red for max loss
                 return plValue >= 0 ? 'rgba(40, 167, 69, 0.6)' : 'rgba(220, 53, 69, 0.6)';
@@ -631,7 +749,8 @@
                 lc_number: document.getElementById('lcNumber').value,
                 amount_usd: parseFloat(document.getElementById('amountUsd').value),
                 issue_date: document.getElementById('issueDate').value,
-                maturity_date: document.getElementById('maturityDate').value,
+                maturity_days: parseInt(document.getElementById('maturityDays').value),
+                contract_rate: parseFloat(document.getElementById('contractRate').value),
                 commodity: document.getElementById('commodity').value,
                 beneficiary: document.getElementById('beneficiary').value
             };
@@ -662,13 +781,13 @@
             html += '<thead><tr><th>Scenario</th><th>Rate Change</th><th>New Rate</th><th>P&L (INR)</th><th>Impact</th></tr></thead><tbody>';
             
             scenarios.forEach(scenario => {
-                const plClass = scenario.total_pl_inr >= 0 ? 'text-success' : 'text-danger';
+                const plClass = scenario.pl_inr >= 0 ? 'text-success' : 'text-danger';
                 html += `<tr>
-                    <td><strong>${scenario.scenario_name}</strong></td>
-                    <td>${scenario.rate_change_percent?.toFixed(2) || '0.00'}%</td>
-                    <td>₹${scenario.scenario_rate?.toFixed(4) || 'N/A'}</td>
-                    <td class="${plClass}">₹${scenario.total_pl_inr ? scenario.total_pl_inr.toLocaleString() : '0'}</td>
-                    <td><span class="badge ${scenario.impact === 'Low Impact' ? 'bg-success' : scenario.impact === 'Medium Impact' ? 'bg-warning' : 'bg-danger'}">${scenario.impact || 'N/A'}</span></td>
+                    <td><strong>${scenario.name}</strong></td>
+                    <td>${(scenario.rate_change * 100).toFixed(2)}%</td>
+                    <td>₹${scenario.new_rate.toFixed(4)}</td>
+                    <td class="${plClass}">₹${scenario.pl_inr.toLocaleString()}</td>
+                    <td><span class="badge ${scenario.impact === 'Low Impact' ? 'bg-success' : scenario.impact === 'Medium Impact' ? 'bg-warning' : 'bg-danger'}">${scenario.impact}</span></td>
                 </tr>`;
             });
             
@@ -676,8 +795,8 @@
             
             // Add summary
             html += '<div class="alert alert-info mt-3">';
-            html += '<strong>Analysis Summary:</strong> Scenario analysis completed for different rate movements. ';
-            html += 'Use this information to plan your hedging strategy based on potential market movements.';
+            html += '<strong>Analysis Summary:</strong> Scenario analysis shows how different contract rates would have affected your P&L using real historical data. ';
+            html += 'This helps understand rate sensitivity and potential hedging strategies.';
             html += '</div>';
             
             document.getElementById('results').innerHTML = html;
@@ -691,10 +810,10 @@
                 lc_number: document.getElementById('lcNumber').value,
                 amount_usd: parseFloat(document.getElementById('amountUsd').value),
                 issue_date: document.getElementById('issueDate').value,
-                maturity_date: document.getElementById('maturityDate').value,
+                maturity_days: parseInt(document.getElementById('maturityDays').value),
+                contract_rate: parseFloat(document.getElementById('contractRate').value),
                 commodity: document.getElementById('commodity').value,
-                beneficiary: document.getElementById('beneficiary').value,
-                include_forward_analysis: document.getElementById('useForwardRates').checked
+                beneficiary: document.getElementById('beneficiary').value
             };
 
             try {
@@ -719,13 +838,13 @@
         }
 
         function displayReportResults(report) {
-            let html = '<h6>Comprehensive Report</h6>';
+            let html = '<h6>Comprehensive Backdated LC Report</h6>';
             html += `<div class="alert alert-info">
                 <strong>Report Generated:</strong> ${new Date().toLocaleString()}<br>
-                <strong>LC ID:</strong> ${report.lc_details?.lc_id || 'N/A'}<br>
-                <strong>Total Value:</strong> $${report.lc_details?.total_value_usd?.toLocaleString() || 'N/A'}<br>
-                <strong>Days Remaining:</strong> ${report.lc_details?.days_remaining || 'N/A'} days<br>
-                <strong>Total Analysis:</strong> Complete risk and P&L assessment
+                <strong>LC ID:</strong> ${report.lc_id}<br>
+                <strong>Total Value:</strong> ${report.total_value}<br>
+                <strong>Status:</strong> ${report.days_remaining}<br>
+                <strong>Final P&L:</strong> ${report.current_pl}
             </div>`;
             
             if (report.executive_summary) {
@@ -733,9 +852,15 @@
                 html += `<p class="text-muted">${report.executive_summary}</p>`;
             }
             
-            html += '<div class="alert alert-success">';
-            html += '<strong>Report Status:</strong> Successfully generated comprehensive analysis<br>';
-            html += `<strong>Report Sections:</strong> ${report.report_sections || 'Multiple'} sections analyzed<br>`;
+            html += '<h6>Analysis Details</h6>';
+            html += '<ul class="list-group">';
+            html += `<li class="list-group-item"><strong>Analysis Period:</strong> ${report.analysis_period || 'Historical period'}</li>`;
+            html += `<li class="list-group-item"><strong>Data Source:</strong> ${report.data_source}</li>`;
+            html += `<li class="list-group-item"><strong>Report Sections:</strong> ${Array.isArray(report.report_sections) ? report.report_sections.join(', ') : report.report_sections}</li>`;
+            html += '</ul>';
+            
+            html += '<div class="alert alert-success mt-3">';
+            html += `<strong>Status:</strong> ${report.status}<br>`;
             html += `<strong>Generation Time:</strong> ${new Date(report.generation_time).toLocaleString()}`;
             html += '</div>';
             

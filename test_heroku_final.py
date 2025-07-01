@@ -1,5 +1,5 @@
 """
-Test the live Heroku deployment
+Test the live Heroku deployment - Clean version
 """
 import requests
 import json
@@ -105,33 +105,6 @@ def test_heroku_deployment():
     print("=" * 80)
     
     return True
-
-if __name__ == "__main__":
-    test_heroku_deployment()
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('success'):
-                pl_result = data.get('pl_result', {})
-                print(f"✅ P&L Calculation Success!")
-                print(f"   Current P&L: ₹{pl_result.get('total_pl_inr', 0):,.2f}")
-                print(f"   Max Profit: ₹{pl_result.get('max_profit', 0):,.2f}")
-                print(f"   Max Loss: ₹{pl_result.get('max_loss', 0):,.2f}")
-                print(f"   Chart Data Points: {len(pl_result.get('chart_data', []))}")
-                
-                if abs(pl_result.get('total_pl_inr', 0)) > 1000 and len(pl_result.get('chart_data', [])) > 0:
-                    print("🚀 HEROKU DEPLOYMENT WORKING PERFECTLY!")
-                else:
-                    print("⚠️  Results seem limited - check logs")
-            else:
-                print(f"❌ API Error: {data.get('error', 'Unknown error')}")
-        else:
-            print(f"❌ HTTP Error: {response.status_code}")
-    except Exception as e:
-        print(f"❌ Connection error: {e}")
-    
-    print("\n" + "=" * 60)
-    print("HEROKU DEPLOYMENT TEST COMPLETE")
-    print("=" * 60)
 
 if __name__ == "__main__":
     test_heroku_deployment()

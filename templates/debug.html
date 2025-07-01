@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>Debug Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        console.log('Script loaded');
+        
+        // Test current rates
+        fetch('/api/current-rates')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Current rates:', data);
+                document.getElementById('results').innerHTML += '<p>Current Rate: ' + JSON.stringify(data) + '</p>';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('results').innerHTML += '<p>Error: ' + error + '</p>';
+            });
+        
+        // Test forward rates
+        fetch('/api/forward-rates')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Forward rates:', data);
+                document.getElementById('results').innerHTML += '<p>Forward Rates: ' + JSON.stringify(data) + '</p>';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('results').innerHTML += '<p>Error: ' + error + '</p>';
+            });
+        
+        // Test P&L calculation
+        const testData = {
+            lc_number: 'DEBUG-001',
+            amount_usd: 100000,
+            issue_date: '2025-04-01',
+            maturity_days: 60,
+            contract_rate: 82.5,
+            commodity: 'Test',
+            beneficiary: 'Test'
+        };
+        
+        fetch('/api/calculate-pl', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(testData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('P&L calculation:', data);
+            document.getElementById('results').innerHTML += '<p>P&L: ' + JSON.stringify(data, null, 2) + '</p>';
+        })
+        .catch(error => {
+            console.error('P&L Error:', error);
+            document.getElementById('results').innerHTML += '<p>P&L Error: ' + error + '</p>';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Currency Risk Management v2.0 - Backdated LC Analysis</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .content {
+            padding: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ecf0f1;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        .btn {
+            background: #3498db;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background: #2980b9;
+        }
+        .results {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            display: none;
+        }
+        .chart-container {
+            margin-top: 20px;
+            height: 400px;
+            background: white;
+            border-radius: 5px;
+            padding: 20px;
+        }
+        .metric-card {
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 10px 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .metric-label {
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+        .validation-info {
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .validation-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .validation-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+        .example-dates {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏦 Currency Risk Management v2.0</h1>
+            <p>Backdated Letter of Credit Analysis with Real Historical Data</p>
+        </div>
+        
+        <div class="content">
+            <div class="example-dates">
+                <strong>💡 Example Backdated LCs:</strong><br>
+                • 30-day LC: Issue: 2024-01-01, Maturity: 2024-01-31<br>
+                • 60-day LC: Issue: 2023-10-01, Maturity: 2023-11-30<br>
+                • 90-day LC: Issue: 2023-07-01, Maturity: 2023-09-29<br>
+                • 120-day LC: Issue: 2023-05-01, Maturity: 2023-08-29
+            </div>
+            
+            <form id="lcForm">
+                <div class="form-group">
+                    <label for="lc_number">LC Number:</label>
+                    <input type="text" id="lc_number" value="LC-BACKDATE-001" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="amount_usd">LC Amount (USD):</label>
+                    <input type="number" id="amount_usd" value="1000000" min="1000" step="1000" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="issue_date">Issue Date:</label>
+                    <input type="date" id="issue_date" value="2024-01-01" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="maturity_days">Maturity Days:</label>
+                    <select id="maturity_days" required>
+                        <option value="30">30 days</option>
+                        <option value="60" selected>60 days</option>
+                        <option value="90">90 days</option>
+                        <option value="120">120 days</option>
+                        <option value="150">150 days</option>
+                        <option value="180">180 days</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="contract_rate">Contract Rate (USD/INR):</label>
+                    <input type="number" id="contract_rate" value="82.50" step="0.01" min="70" max="90" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="beneficiary">Beneficiary:</label>
+                    <input type="text" id="beneficiary" value="Export Partner Corp">
+                </div>
+                
+                <div class="form-group">
+                    <label for="commodity">Commodity:</label>
+                    <input type="text" id="commodity" value="Technology Equipment">
+                </div>
+                
+                <button type="button" class="btn" onclick="validateDates()">1. Validate Dates</button>
+                <button type="button" class="btn" onclick="calculatePL()" style="margin-left: 10px;">2. Calculate P&L</button>
+            </form>
+            
+            <div id="validation" class="validation-info" style="display: none;"></div>
+            
+            <div id="loading" class="loading">
+                <h3>🔄 Fetching Historical Data...</h3>
+                <p>This may take a few moments as we retrieve real USD/INR rates</p>
+            </div>
+            
+            <div id="results" class="results">
+                <h2>📊 P&L Analysis Results</h2>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                    <div class="metric-card">
+                        <div class="metric-value" id="final-pl">-</div>
+                        <div class="metric-label">Final P&L (INR)</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="max-profit">-</div>
+                        <div class="metric-label">Maximum Profit (INR)</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="max-loss">-</div>
+                        <div class="metric-label">Maximum Loss (INR)</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="volatility">-</div>
+                        <div class="metric-label">P&L Volatility (INR)</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="var-95">-</div>
+                        <div class="metric-label">VaR 95% (INR)</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="data-points">-</div>
+                        <div class="metric-label">Data Points</div>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <canvas id="plChart" width="800" height="400"></canvas>
+                </div>
+                
+                <div id="daily-data" style="margin-top: 20px;">
+                    <h3>📅 Daily P&L Data (Last 10 Days)</h3>
+                    <div id="daily-table"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let plChart = null;
+        
+        async function validateDates() {
+            const formData = getFormData();
+            const validationDiv = document.getElementById('validation');
+            
+            try {
+                const response = await fetch('/api/validate-dates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    const validation = result.validation;
+                    let message = `
+                        <strong>✅ Date Validation Results:</strong><br>
+                        • Issue Date: ${formData.issue_date} ${validation.issue_date_valid ? '✅' : '❌'}<br>
+                        • Maturity Date: ${validation.maturity_date} ${validation.maturity_date_valid ? '✅' : '❌'}<br>
+                        • Days Since Maturity: ${validation.days_since_maturity}<br>
+                        • Is Backdated: ${validation.is_backdated ? '✅ Yes' : '❌ No'}
+                    `;
+                    
+                    validationDiv.className = validation.is_backdated ? 
+                        'validation-info validation-success' : 'validation-info validation-error';
+                    validationDiv.innerHTML = message;
+                } else {
+                    validationDiv.className = 'validation-info validation-error';
+                    validationDiv.innerHTML = `<strong>❌ Validation Error:</strong> ${result.error}`;
+                }
+                
+                validationDiv.style.display = 'block';
+                
+            } catch (error) {
+                validationDiv.className = 'validation-info validation-error';
+                validationDiv.innerHTML = `<strong>❌ Error:</strong> ${error.message}`;
+                validationDiv.style.display = 'block';
+            }
+        }
+        
+        async function calculatePL() {
+            const formData = getFormData();
+            const loadingDiv = document.getElementById('loading');
+            const resultsDiv = document.getElementById('results');
+            
+            loadingDiv.style.display = 'block';
+            resultsDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/calculate-backdated-pl', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayResults(result.data);
+                } else {
+                    alert(`Error: ${result.error}`);
+                }
+                
+            } catch (error) {
+                alert(`Network Error: ${error.message}`);
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+        
+        function getFormData() {
+            return {
+                lc_number: document.getElementById('lc_number').value,
+                amount_usd: parseFloat(document.getElementById('amount_usd').value),
+                issue_date: document.getElementById('issue_date').value,
+                maturity_days: parseInt(document.getElementById('maturity_days').value),
+                contract_rate: parseFloat(document.getElementById('contract_rate').value),
+                beneficiary: document.getElementById('beneficiary').value,
+                commodity: document.getElementById('commodity').value
+            };
+        }
+        
+        function displayResults(data) {
+            // Update metric cards
+            document.getElementById('final-pl').textContent = 
+                `₹${data.pl_summary.final_pl_inr.toLocaleString()}`;
+            document.getElementById('max-profit').textContent = 
+                `₹${data.pl_summary.max_profit_inr.toLocaleString()}`;
+            document.getElementById('max-loss').textContent = 
+                `₹${data.pl_summary.max_loss_inr.toLocaleString()}`;
+            document.getElementById('volatility').textContent = 
+                `₹${data.risk_metrics.pl_volatility_inr.toLocaleString()}`;
+            document.getElementById('var-95').textContent = 
+                `₹${data.risk_metrics.var_95_inr.toLocaleString()}`;
+            document.getElementById('data-points').textContent = 
+                data.pl_summary.total_data_points;
+            
+            // Create chart
+            createPLChart(data.daily_pl);
+            
+            // Show daily data table
+            showDailyData(data.daily_pl);
+            
+            // Show results
+            document.getElementById('results').style.display = 'block';
+        }
+        
+        function createPLChart(dailyPL) {
+            const ctx = document.getElementById('plChart').getContext('2d');
+            
+            if (plChart) {
+                plChart.destroy();
+            }
+            
+            const dates = dailyPL.map(d => d.date);
+            const plAmounts = dailyPL.map(d => d.daily_pl_inr);
+            const marketRates = dailyPL.map(d => d.market_rate);
+            
+            plChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Daily P&L (INR)',
+                        data: plAmounts,
+                        borderColor: plAmounts[plAmounts.length - 1] >= 0 ? '#2ecc71' : '#e74c3c',
+                        backgroundColor: plAmounts[plAmounts.length - 1] >= 0 ? 'rgba(46, 204, 113, 0.1)' : 'rgba(231, 76, 60, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '₹' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `P&L: ₹${context.parsed.y.toLocaleString()}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function showDailyData(dailyPL) {
+            const last10Days = dailyPL.slice(-10);
+            let tableHTML = `
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 10px; border: 1px solid #dee2e6;">Date</th>
+                            <th style="padding: 10px; border: 1px solid #dee2e6;">Market Rate</th>
+                            <th style="padding: 10px; border: 1px solid #dee2e6;">P&L (INR)</th>
+                            <th style="padding: 10px; border: 1px solid #dee2e6;">Days Remaining</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            last10Days.forEach(day => {
+                const plColor = day.daily_pl_inr >= 0 ? '#2ecc71' : '#e74c3c';
+                tableHTML += `
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #dee2e6;">${day.date}</td>
+                        <td style="padding: 10px; border: 1px solid #dee2e6;">${day.market_rate}</td>
+                        <td style="padding: 10px; border: 1px solid #dee2e6; color: ${plColor}; font-weight: bold;">
+                            ₹${day.daily_pl_inr.toLocaleString()}
+                        </td>
+                        <td style="padding: 10px; border: 1px solid #dee2e6;">${day.days_remaining}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += '</tbody></table>';
+            document.getElementById('daily-table').innerHTML = tableHTML;
+        }
+        
+        // Auto-calculate maturity date when issue date or days change
+        document.getElementById('issue_date').addEventListener('change', updateMaturityPreview);
+        document.getElementById('maturity_days').addEventListener('change', updateMaturityPreview);
+        
+        function updateMaturityPreview() {
+            const issueDate = document.getElementById('issue_date').value;
+            const maturityDays = parseInt(document.getElementById('maturity_days').value);
+            
+            if (issueDate && maturityDays) {
+                const issue = new Date(issueDate);
+                const maturity = new Date(issue.getTime() + (maturityDays * 24 * 60 * 60 * 1000));
+                
+                console.log(`Issue: ${issueDate}, Maturity: ${maturity.toISOString().split('T')[0]}`);
+            }
+        }
+        
+        // Initialize
+        updateMaturityPreview();
+    </script>
+</body>
+</html>
