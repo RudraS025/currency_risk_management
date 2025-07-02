@@ -122,7 +122,8 @@
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     <label for="contractRate" class="form-label">Contract Rate (INR per USD)</label>
-                                    <input type="number" class="form-control" id="contractRate" value="82.50" step="0.01" required>
+                                    <input type="number" class="form-control" id="contractRate" value="85.20" step="0.01" required>
+                                    <small class="text-muted">Auto-suggested based on forward rate</small>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="businessType" class="form-label">Business Type</label>
@@ -466,8 +467,9 @@
                                 <div class="card">
                                     <div class="card-body">
                                         <h6>Daily P&L Breakdown (Forward Rate Based)</h6>
-                                        <div class="table-responsive">
-                                            <table class="table table-sm">
+                                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                            <table class="table table-sm table-hover">
+                                                <thead class="table-dark sticky-top">
                                                 <thead>
                                                     <tr>
                                                         <th>Date</th>
