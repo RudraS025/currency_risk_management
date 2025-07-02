@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Currency Risk Management System v3.0 - Forward Rate Based
-FIXED VERSION - Complete rewrite with proper forward rate calculations and settlement options
+Complete rewrite with proper forward rate calculations and settlement options
 """
 
 import yfinance as yf
@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-print("🚀 Starting Currency Risk Management System v3.0 (Forward Rate Based - FIXED)")
-print("📊 Real forward rate calculations with complete date coverage")
+print("🚀 Starting Currency Risk Management System v3.0 (Forward Rate Based)")
+print("📊 Real forward rate calculations with settlement options")
 print("🎯 Focus: Forward Rate = Spot × e^(r/365 × t)")
 
 class ForwardRateLC:
@@ -59,54 +59,64 @@ class RBIRateProvider:
             return 6.5  # Fallback rate
 
 class HistoricalForexProvider:
-    """Provide historical USD/INR exchange rates with COMPLETE DATE COVERAGE"""
+    """Provide historical USD/INR exchange rates"""
     
     def get_historical_rates(self, start_date: str, end_date: str) -> pd.DataFrame:
-        """Get complete USD/INR rates with guaranteed full date coverage"""
+        """Get historical USD/INR rates from Yahoo Finance"""
         try:
-            logger.info(f"Fetching COMPLETE USD/INR data from {start_date} to {end_date}")
+            logger.info(f"Fetching USD/INR data from {start_date} to {end_date}")
             
-            # Use synthetic data to guarantee complete coverage
-            # This ensures we always get exactly the date range requested
-            return self.generate_synthetic_data(start_date, end_date)
+            # Get data from yfinance
+            ticker = yf.Ticker("USDINR=X")
+            data = ticker.history(start=start_date, end=end_date, interval="1d")
+            
+            if not data.empty:
+                rates = []
+                for date, row in data.iterrows():
+                    rates.append({
+                        'date': date.strftime('%Y-%m-%d'),
+                        'open': round(row['Open'], 4),
+                        'high': round(row['High'], 4), 
+                        'low': round(row['Low'], 4),
+                        'close': round(row['Close'], 4),
+                        'volume': int(row['Volume']) if not pd.isna(row['Volume']) else 0
+                    })
+                
+                df = pd.DataFrame(rates)
+                logger.info(f"Retrieved {len(df)} days of historical data")
+                return df
+            else:
+                logger.warning("No historical data available from yfinance")
+                return self.generate_synthetic_data(start_date, end_date)
                 
         except Exception as e:
-            logger.error(f"Error in data generation: {e}")
+            logger.error(f"Error fetching historical data: {e}")
             return self.generate_synthetic_data(start_date, end_date)
     
     def generate_synthetic_data(self, start_date: str, end_date: str) -> pd.DataFrame:
-        """Generate realistic synthetic USD/INR data with COMPLETE date coverage"""
-        # Create complete date range including weekends/holidays
+        """Generate realistic synthetic USD/INR data as fallback"""
         dates = pd.date_range(start=start_date, end=end_date, freq='D')
+        base_rate = 84.5  # Realistic base rate for 2025
         
-        # Use date-based seed for consistency across calls
-        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-        np.random.seed(start_dt.toordinal())  # Consistent seed based on start date
-        
-        base_rate = 85.0  # Realistic base rate for the demo period
         rates = []
         current_rate = base_rate
         
-        for i, date in enumerate(dates):
-            # Add realistic daily volatility with some trend
-            daily_change = np.random.normal(0, 0.3)  # ~0.3% daily volatility
-            trend = 0.002 * i / len(dates)  # Small upward trend over time
-            current_rate += daily_change + trend
-            current_rate = max(82.0, min(89.0, current_rate))  # Keep within realistic range
+        for date in dates:
+            # Add realistic daily volatility
+            daily_change = np.random.normal(0, 0.2)  # ~0.2% daily volatility
+            current_rate += daily_change
+            current_rate = max(82.0, min(87.0, current_rate))  # Keep within range
             
             rates.append({
                 'date': date.strftime('%Y-%m-%d'),
                 'open': round(current_rate + np.random.normal(0, 0.05), 4),
-                'high': round(current_rate * 1.003, 4),
-                'low': round(current_rate * 0.997, 4),
+                'high': round(current_rate * 1.002, 4),
+                'low': round(current_rate * 0.998, 4),
                 'close': round(current_rate, 4),
                 'volume': np.random.randint(1000000, 5000000)
             })
         
-        result_df = pd.DataFrame(rates)
-        logger.info(f"Generated COMPLETE synthetic data for {len(rates)} days ({start_date} to {end_date})")
-        logger.info(f"COMPLETE data coverage: {result_df.iloc[0]['date']} to {result_df.iloc[-1]['date']}")
-        return result_df
+        return pd.DataFrame(rates)
 
 class ForwardRatePLCalculator:
     """Calculate P&L using forward rates with settlement options"""
@@ -134,7 +144,7 @@ class ForwardRatePLCalculator:
         logger.info(f"Interest rate: {self.interest_rate}%")
         logger.info(f"Amount: ${lc.amount_usd:,.2f}")
         
-        # Get COMPLETE historical rates for the LC period
+        # Get historical rates for the LC period
         start_date = lc.issue_date.strftime('%Y-%m-%d')
         end_date = lc.maturity_date.strftime('%Y-%m-%d')
         
@@ -153,7 +163,7 @@ class ForwardRatePLCalculator:
             date = row['date']
             spot_rate = row['close']
             
-            # Calculate days remaining (decreasing counter: 152, 151, 150, ..., 1, 0)
+            # Calculate days remaining (decreasing counter: 60, 59, 58, ..., 1, 0)
             days_remaining = total_days - i
             
             # Calculate forward rate for this day
@@ -220,7 +230,7 @@ class ForwardRatePLCalculator:
                 'max_profit_inr': round(max_profit, 2),
                 'max_loss_inr': round(max_loss, 2),
                 'total_data_points': len(daily_pl),
-                'data_source': 'Forward_Rate_Calculation_COMPLETE',
+                'data_source': 'Forward_Rate_Calculation',
                 'calculation_method': 'Forward Rate = Spot × e^(r/365 × t)',
                 'formula_used': f'Forward = Spot × e^({self.interest_rate}%/365 × days)'
             },
@@ -239,7 +249,7 @@ class ForwardRatePLCalculator:
         logger.info(f"  Final Close P&L: ₹{final_close_pl:,.2f}")
         logger.info(f"  Max Profit: ₹{max_profit:,.2f}")
         logger.info(f"  Max Loss: ₹{max_loss:,.2f}")
-        logger.info(f"  Data Points: {len(daily_pl)} (COMPLETE COVERAGE)")
+        logger.info(f"  Data Points: {len(daily_pl)}")
         logger.info(f"  Interest Rate: {self.interest_rate}%")
         
         return summary
@@ -255,10 +265,10 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'version': '3.0.0_Forward_Rate_FIXED',
-        'focus': 'Forward Rate LC Analysis - Complete Date Coverage',
+        'version': '3.0.0_Forward_Rate',
+        'focus': 'Forward Rate LC Analysis',
         'formula': 'Forward = Spot × e^(r/365 × t)',
-        'data_source': 'Synthetic Data with Complete Coverage',
+        'data_source': 'Yahoo Finance + RBI Rate',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -268,26 +278,38 @@ def get_current_rates():
     try:
         logger.info("Fetching current USD/INR rate and RBI rate")
         
+        # Get current USD/INR rate
+        ticker = yf.Ticker("USDINR=X")
+        current_data = ticker.history(period="1d")
+        
         # Get RBI rate
         rbi_provider = RBIRateProvider()
         rbi_rate = rbi_provider.get_rbi_repo_rate()
         
-        # Use fallback rate for demo
-        rate = 85.0
-        logger.info(f"Current rate: {rate:.4f}, RBI rate: {rbi_rate}%")
-        return jsonify({
-            'success': True,
-            'rate': round(rate, 4),
-            'rbi_rate': rbi_rate,
-            'source': 'Demo Rate',
-            'timestamp': datetime.now().isoformat()
-        })
+        if not current_data.empty:
+            rate = current_data['Close'].iloc[-1]
+            logger.info(f"Current rate: {rate:.4f}, RBI rate: {rbi_rate}%")
+            return jsonify({
+                'success': True,
+                'rate': round(rate, 4),
+                'rbi_rate': rbi_rate,
+                'source': 'Yahoo Finance',
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'rate': 84.50,  # Fallback
+                'rbi_rate': rbi_rate,
+                'source': 'Fallback Rate',
+                'timestamp': datetime.now().isoformat()
+            })
             
     except Exception as e:
         logger.error(f"Error fetching current rates: {e}")
         return jsonify({
             'success': True,
-            'rate': 85.0,
+            'rate': 84.50,
             'rbi_rate': 6.5,
             'source': 'Fallback Rate',
             'timestamp': datetime.now().isoformat()
@@ -327,8 +349,8 @@ def calculate_forward_pl():
         return jsonify({
             'success': True,
             'data': result,
-            'message': 'Forward rate P&L calculation completed (COMPLETE COVERAGE)',
-            'calculation_type': 'forward_rate_complete'
+            'message': 'Forward rate P&L calculation completed',
+            'calculation_type': 'forward_rate'
         })
         
     except Exception as e:
@@ -346,7 +368,7 @@ def calculate_backdated_pl():
 
 @app.route('/api/get-suggested-contract-rate', methods=['POST'])
 def get_suggested_contract_rate():
-    """Get suggested contract rate based on forward rate of FIRST DAY"""
+    """Get suggested contract rate based on forward rate of first day"""
     try:
         data = request.get_json()
         logger.info(f"Suggested contract rate request: {data}")
@@ -367,30 +389,25 @@ def get_suggested_contract_rate():
         # Calculate maturity days
         maturity_days = (maturity_dt - issue_dt).days
         
-        # Get COMPLETE historical data for the full range to ensure consistency
+        # Get spot rate for the issue date
         forex_provider = HistoricalForexProvider()
-        historical_data = forex_provider.get_historical_rates(issue_date, maturity_date)
+        historical_data = forex_provider.get_historical_rates(issue_date, issue_date)
         
         if historical_data.empty:
             return jsonify({
                 'success': False,
-                'error': 'Could not fetch historical data for the date range'
+                'error': 'Could not fetch historical data for the issue date'
             }), 500
         
-        # Get the FIRST day's data (should be the issue date)
-        first_day_data = historical_data.iloc[0]
-        spot_rate = first_day_data['close']
-        first_date = first_day_data['date']
+        spot_rate = historical_data.iloc[0]['close']
         
         # Get RBI rate
         rbi_provider = RBIRateProvider()
         interest_rate = rbi_provider.get_rbi_repo_rate()
         
-        # Calculate forward rate for the FIRST day (full maturity days remaining)
+        # Calculate forward rate for the first day (full maturity days remaining)
         calculator = ForwardRatePLCalculator()
         forward_rate = calculator.calculate_forward_rate(spot_rate, maturity_days, interest_rate)
-        
-        logger.info(f"Contract rate suggestion: First day {first_date}, spot {spot_rate:.4f}, forward {forward_rate:.4f}")
         
         return jsonify({
             'success': True,
@@ -399,9 +416,7 @@ def get_suggested_contract_rate():
             'interest_rate': interest_rate,
             'maturity_days': maturity_days,
             'formula': f'Forward = {spot_rate:.4f} × e^({interest_rate}%/365 × {maturity_days})',
-            'calculation_date': first_date,
-            'data_points': len(historical_data),
-            'coverage': 'COMPLETE'
+            'calculation_date': issue_date
         })
         
     except Exception as e:
@@ -412,7 +427,7 @@ def get_suggested_contract_rate():
         }), 500
 
 if __name__ == '__main__':
-    print("🌐 Forward Rate LC System starting on port 5000 (FIXED VERSION)")
+    print("🌐 Forward Rate LC System starting on port 5000")
     print("📊 Access dashboard: http://localhost:5000")
     print("🔧 API endpoints:")
     print("   - /api/health")
