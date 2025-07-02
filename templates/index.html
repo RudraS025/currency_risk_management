@@ -122,7 +122,7 @@
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     <label for="contractRate" class="form-label">Contract Rate (INR per USD)</label>
-                                    <input type="number" class="form-control" id="contractRate" value="85.20" step="0.01" required>
+                                    <input type="number" class="form-control" id="contractRate" value="85.95" step="0.01" required>
                                     <small class="text-muted">Auto-suggested based on forward rate</small>
                                 </div>
                                 <div class="col-md-6">
@@ -136,7 +136,7 @@
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     <label for="issueDate" class="form-label">Issue Date</label>
-                                    <input type="date" class="form-control" id="issueDate" value="2025-05-03" required>
+                                    <input type="date" class="form-control" id="issueDate" value="2025-04-03" required>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="maturityDate" class="form-label">Maturity Date</label>
@@ -311,11 +311,13 @@
                     // Show tooltip or info
                     const info = document.createElement('small');
                     info.className = 'text-muted';
-                    info.innerHTML = `<br>💡 Auto-suggested based on forward rate: ₹${data.spot_rate} × e^(${data.interest_rate}% × ${data.maturity_days}/365)`;
+                    info.innerHTML = `<br>💡 Auto-suggested based on forward rate: ₹${data.spot_rate} × e^(${data.interest_rate}%/365 × ${data.maturity_days})`;
                     
                     // Remove existing info
-                    const existingInfo = contractRateField.parentNode.querySelector('small');
-                    if (existingInfo) existingInfo.remove();
+                    const existingInfo = contractRateField.parentNode.querySelector('small.text-muted');
+                    if (existingInfo && existingInfo.innerHTML.includes('Auto-suggested')) {
+                        existingInfo.remove();
+                    }
                     
                     contractRateField.parentNode.appendChild(info);
                     
@@ -467,10 +469,9 @@
                                 <div class="card">
                                     <div class="card-body">
                                         <h6>Daily P&L Breakdown (Forward Rate Based)</h6>
-                                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                                            <table class="table table-sm table-hover">
-                                                <thead class="table-dark sticky-top">
-                                                <thead>
+                                        <div class="table-responsive" style="max-height: 500px; overflow-y: auto; border: 1px solid #dee2e6;">
+                                            <table class="table table-sm table-hover mb-0">
+                                                <thead class="table-dark position-sticky" style="top: 0; z-index: 10;">
                                                     <tr>
                                                         <th>Date</th>
                                                         <th>Days Left</th>
