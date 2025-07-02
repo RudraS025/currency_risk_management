@@ -287,6 +287,61 @@
             }
         }
 
+        // Auto-suggest contract rate when dates change
+        async function updateSuggestedContractRate() {
+            const issueDate = document.getElementById('issueDate').value;
+            const maturityDate = document.getElementById('maturityDate').value;
+            const contractRateField = document.getElementById('contractRate');
+            
+            if (!issueDate || !maturityDate) return;
+            
+            try {
+                console.log('🔄 Fetching suggested contract rate for dates:', issueDate, 'to', maturityDate);
+                
+                const response = await fetch('/api/get-suggested-contract-rate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        issue_date: issueDate,
+                        maturity_date: maturityDate
+                    })
+                });
+                
+                const data = await response.json();
+                console.log('📈 Suggested contract rate data:', data);
+                
+                if (data.success) {
+                    contractRateField.value = data.suggested_contract_rate;
+                    contractRateField.style.backgroundColor = '#e8f5e8';
+                    
+                    // Show tooltip or info
+                    const info = document.createElement('small');
+                    info.className = 'text-muted';
+                    info.innerHTML = `<br>💡 Auto-suggested based on forward rate: ₹${data.spot_rate} × e^(${data.interest_rate}% × ${data.maturity_days}/365)`;
+                    
+                    // Remove existing info
+                    const existingInfo = contractRateField.parentNode.querySelector('small');
+                    if (existingInfo) existingInfo.remove();
+                    
+                    contractRateField.parentNode.appendChild(info);
+                    
+                    // Remove highlight after 3 seconds
+                    setTimeout(() => {
+                        contractRateField.style.backgroundColor = '';
+                        if (info) info.remove();
+                    }, 5000);
+                }
+            } catch (error) {
+                console.error('❌ Error fetching suggested contract rate:', error);
+            }
+        }
+        
+        // Add event listeners for date changes
+        document.getElementById('issueDate').addEventListener('change', updateSuggestedContractRate);
+        document.getElementById('maturityDate').addEventListener('change', updateSuggestedContractRate);
+
         document.getElementById('plForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -433,7 +488,7 @@
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    ${dailyPL.slice(0, 10).map(day => `
+                                                    ${dailyPL.map(day => `
                                                         <tr>
                                                             <td>${day.date || 'N/A'}</td>
                                                             <td>${day.days_remaining || 0}</td>
@@ -443,7 +498,6 @@
                                                             <td class="${(day.pl_percentage || 0) >= 0 ? 'text-success' : 'text-danger'}">${(day.pl_percentage || 0).toFixed(2)}%</td>
                                                         </tr>
                                                     `).join('')}
-                                                    ${dailyPL.length > 10 ? `<tr><td colspan="6" class="text-center text-muted">... and ${dailyPL.length - 10} more days</td></tr>` : ''}
                                                 </tbody>
                                             </table>
                                         </div>
