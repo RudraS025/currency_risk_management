@@ -330,19 +330,19 @@
                 console.log('✅ P&L calculation result:', data);
                 
                 if (data.success && data.data) {
-                    // Extract values from correct response structure
-                    const plSummary = data.data.pl_summary;
-                    const riskMetrics = data.data.risk_metrics;
-                    const lcDetails = data.data.lc_details;
-                    const dailyPL = data.data.daily_pl;
+                    // Extract values from correct response structure with safe access
+                    const plSummary = data.data.pl_summary || {};
+                    const riskMetrics = data.data.risk_metrics || {};
+                    const lcDetails = data.data.lc_details || {};
+                    const dailyPL = data.data.daily_pl || [];
                     
-                    // Display results with correct field names
-                    const finalPL = plSummary.final_pl_inr;
-                    const maxProfit = plSummary.max_profit_inr;
-                    const maxLoss = plSummary.max_loss_inr;
-                    const var95 = riskMetrics.var_95_inr;
-                    const dataPoints = plSummary.total_data_points;
-                    const dataSource = plSummary.data_source;
+                    // Display results with correct field names from API and safe defaults
+                    const finalPL = plSummary.final_close_pl_inr || plSummary.final_expected_pl_inr || 0;
+                    const maxProfit = plSummary.max_profit_inr || 0;
+                    const maxLoss = plSummary.max_loss_inr || 0;
+                    const var95 = riskMetrics.var_95_inr || 0;
+                    const dataPoints = plSummary.total_data_points || 0;
+                    const dataSource = plSummary.data_source || plSummary.calculation_method || 'API';
                     
                     const profitColor = finalPL >= 0 ? 'text-success' : 'text-danger';
                     const profitIcon = finalPL >= 0 ? '📈' : '📉';
@@ -350,7 +350,7 @@
                     results.innerHTML = `
                         <div class="alert alert-success">
                             <h6>${profitIcon} Backdated LC Analysis Complete</h6>
-                            <p>Analysis based on real historical USD/INR exchange rates from ${lcDetails.issue_date} to ${lcDetails.maturity_date}</p>
+                            <p>Analysis based on real historical USD/INR exchange rates from ${lcDetails.issue_date || 'N/A'} to ${lcDetails.maturity_date || 'N/A'}</p>
                         </div>
                         
                         <div class="row">
@@ -393,9 +393,9 @@
                                 <div class="card">
                                     <div class="card-body">
                                         <h6>Analysis Details</h6>
-                                        <p><strong>LC Number:</strong> ${lcDetails.lc_number}</p>
-                                        <p><strong>Amount:</strong> $${lcDetails.amount_usd.toLocaleString()}</p>
-                                        <p><strong>Contract Rate:</strong> ₹${lcDetails.contract_rate}</p>
+                                        <p><strong>LC Number:</strong> ${lcDetails.lc_number || 'N/A'}</p>
+                                        <p><strong>Amount:</strong> $${(lcDetails.amount_usd || 0).toLocaleString()}</p>
+                                        <p><strong>Contract Rate:</strong> ₹${lcDetails.contract_rate || 0}</p>
                                         <p><strong>Data Points:</strong> ${dataPoints} days</p>
                                         <p><strong>Data Source:</strong> ${dataSource}</p>
                                     </div>
@@ -405,14 +405,53 @@
                                 <div class="card">
                                     <div class="card-body">
                                         <h6>Risk Metrics</h6>
-                                        <p><strong>P&L Volatility:</strong> ₹${riskMetrics.pl_volatility_inr.toLocaleString()}</p>
-                                        <p><strong>Profit Days:</strong> ${riskMetrics.profit_days}/${dataPoints}</p>
-                                        <p><strong>Loss Days:</strong> ${riskMetrics.loss_days}/${dataPoints}</p>
-                                        <p><strong>Confidence Level:</strong> ${riskMetrics.confidence_level}%</p>
+                                        <p><strong>P&L Volatility:</strong> ₹${(riskMetrics.pl_volatility_inr || 0).toLocaleString()}</p>
+                                        <p><strong>Profit Days:</strong> ${riskMetrics.profit_days || 0}/${dataPoints}</p>
+                                        <p><strong>Loss Days:</strong> ${riskMetrics.loss_days || 0}/${dataPoints}</p>
+                                        <p><strong>Confidence Level:</strong> ${riskMetrics.confidence_level || 95}%</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                        
+                        ${dailyPL.length > 0 ? `
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6>Daily P&L Breakdown (Forward Rate Based)</h6>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Date</th>
+                                                        <th>Days Left</th>
+                                                        <th>Spot Rate</th>
+                                                        <th>Forward Rate</th>
+                                                        <th>Close P&L</th>
+                                                        <th>%</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    ${dailyPL.slice(0, 10).map(day => `
+                                                        <tr>
+                                                            <td>${day.date || 'N/A'}</td>
+                                                            <td>${day.days_remaining || 0}</td>
+                                                            <td>₹${(day.spot_rate || 0).toFixed(4)}</td>
+                                                            <td>₹${(day.forward_rate || 0).toFixed(4)}</td>
+                                                            <td class="${(day.close_pl_inr || 0) >= 0 ? 'text-success' : 'text-danger'}">₹${(day.close_pl_inr || 0).toLocaleString()}</td>
+                                                            <td class="${(day.pl_percentage || 0) >= 0 ? 'text-success' : 'text-danger'}">${(day.pl_percentage || 0).toFixed(2)}%</td>
+                                                        </tr>
+                                                    `).join('')}
+                                                    ${dailyPL.length > 10 ? `<tr><td colspan="6" class="text-center text-muted">... and ${dailyPL.length - 10} more days</td></tr>` : ''}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
                     `;
                     
                     resultsSection.style.display = 'block';
