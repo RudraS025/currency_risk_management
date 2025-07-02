@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Currency Risk Management System v3.0 - Forward Rate Based
-FIXED VERSION - Complete rewrite with proper forward rate calculations and settlement options
+Currency Risk Management System v3.0 - REAL DATA VERSION
+LIVE VERSION - Using real USD/INR rates from Yahoo Finance with gap filling
 """
 
 import yfinance as yf
@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-print("🚀 Starting Currency Risk Management System v3.0 (Forward Rate Based - FIXED)")
-print("📊 Real forward rate calculations with complete date coverage")
-print("🎯 Focus: Forward Rate = Spot × e^(r/365 × t)")
+print("🚀 Starting Currency Risk Management System v3.0 (REAL DATA VERSION)")
+print("📊 LIVE USD/INR rates from Yahoo Finance with gap filling for complete coverage")
+print("🎯 Focus: Real data + Forward Rate = Spot × e^(r/365 × t)")
 
 class ForwardRateLC:
     """Letter of Credit with forward rate calculations"""
@@ -59,23 +59,83 @@ class RBIRateProvider:
             return 6.5  # Fallback rate
 
 class HistoricalForexProvider:
-    """Provide historical USD/INR exchange rates with COMPLETE DATE COVERAGE"""
+    """Provide historical USD/INR exchange rates with REAL DATA and gap filling"""
     
     def get_historical_rates(self, start_date: str, end_date: str) -> pd.DataFrame:
-        """Get complete USD/INR rates with guaranteed full date coverage"""
+        """Get REAL USD/INR rates from Yahoo Finance with gap filling for complete coverage"""
         try:
-            logger.info(f"Fetching COMPLETE USD/INR data from {start_date} to {end_date}")
+            logger.info(f"Fetching REAL USD/INR data from Yahoo Finance: {start_date} to {end_date}")
             
-            # Use synthetic data to guarantee complete coverage
-            # This ensures we always get exactly the date range requested
-            return self.generate_synthetic_data(start_date, end_date)
+            # Get real data from Yahoo Finance
+            ticker = yf.Ticker("USDINR=X")
+            data = ticker.history(start=start_date, end=end_date)
+            
+            if not data.empty:
+                # Convert to our format
+                real_data = []
+                for date, row in data.iterrows():
+                    real_data.append({
+                        'date': date.strftime('%Y-%m-%d'),
+                        'open': round(float(row['Open']), 4),
+                        'high': round(float(row['High']), 4),
+                        'low': round(float(row['Low']), 4),
+                        'close': round(float(row['Close']), 4),
+                        'volume': int(row['Volume']) if pd.notna(row['Volume']) else 1000000
+                    })
+                
+                real_df = pd.DataFrame(real_data)
+                
+                # Fill gaps for complete date coverage (weekends/holidays)
+                complete_df = self.fill_date_gaps(real_df, start_date, end_date)
+                
+                logger.info(f"REAL DATA from Yahoo Finance: {len(real_data)} trading days, {len(complete_df)} total days after gap filling")
+                return complete_df
+            else:
+                logger.warning("No real data available, using fallback synthetic data")
+                return self.generate_fallback_data(start_date, end_date)
                 
         except Exception as e:
-            logger.error(f"Error in data generation: {e}")
-            return self.generate_synthetic_data(start_date, end_date)
+            logger.error(f"Error fetching real data: {e}, using fallback synthetic data")
+            return self.generate_fallback_data(start_date, end_date)
     
-    def generate_synthetic_data(self, start_date: str, end_date: str) -> pd.DataFrame:
-        """Generate realistic synthetic USD/INR data with COMPLETE date coverage"""
+    def fill_date_gaps(self, real_df: pd.DataFrame, start_date: str, end_date: str) -> pd.DataFrame:
+        """Fill gaps in real data for weekends/holidays using forward fill"""
+        # Create complete date range
+        dates = pd.date_range(start=start_date, end=end_date, freq='D')
+        
+        # Convert real data to dict for easy lookup
+        real_data_dict = {row['date']: row for _, row in real_df.iterrows()}
+        
+        complete_data = []
+        last_known_rate = None
+        
+        for date in dates:
+            date_str = date.strftime('%Y-%m-%d')
+            
+            if date_str in real_data_dict:
+                # Use real data
+                row = real_data_dict[date_str]
+                complete_data.append(row)
+                last_known_rate = row
+            else:
+                # Fill gap with last known rate (forward fill)
+                if last_known_rate:
+                    gap_row = {
+                        'date': date_str,
+                        'open': last_known_rate['close'],
+                        'high': last_known_rate['close'],
+                        'low': last_known_rate['close'],
+                        'close': last_known_rate['close'],
+                        'volume': 0  # Indicate this is gap-filled
+                    }
+                    complete_data.append(gap_row)
+        
+        return pd.DataFrame(complete_data)
+    
+    def generate_fallback_data(self, start_date: str, end_date: str) -> pd.DataFrame:
+        """Generate fallback synthetic data when real data is unavailable"""
+        logger.warning("Using fallback synthetic data - real data unavailable")
+        
         # Create complete date range including weekends/holidays
         dates = pd.date_range(start=start_date, end=end_date, freq='D')
         
@@ -83,7 +143,7 @@ class HistoricalForexProvider:
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
         np.random.seed(start_dt.toordinal())  # Consistent seed based on start date
         
-        base_rate = 85.0  # Realistic base rate for the demo period
+        base_rate = 85.0  # Realistic base rate
         rates = []
         current_rate = base_rate
         
@@ -104,8 +164,7 @@ class HistoricalForexProvider:
             })
         
         result_df = pd.DataFrame(rates)
-        logger.info(f"Generated COMPLETE synthetic data for {len(rates)} days ({start_date} to {end_date})")
-        logger.info(f"COMPLETE data coverage: {result_df.iloc[0]['date']} to {result_df.iloc[-1]['date']}")
+        logger.info(f"Generated fallback synthetic data for {len(rates)} days ({start_date} to {end_date})")
         return result_df
 
 class ForwardRatePLCalculator:
@@ -134,7 +193,7 @@ class ForwardRatePLCalculator:
         logger.info(f"Interest rate: {self.interest_rate}%")
         logger.info(f"Amount: ${lc.amount_usd:,.2f}")
         
-        # Get COMPLETE historical rates for the LC period
+        # Get REAL historical rates for the LC period
         start_date = lc.issue_date.strftime('%Y-%m-%d')
         end_date = lc.maturity_date.strftime('%Y-%m-%d')
         
@@ -220,7 +279,7 @@ class ForwardRatePLCalculator:
                 'max_profit_inr': round(max_profit, 2),
                 'max_loss_inr': round(max_loss, 2),
                 'total_data_points': len(daily_pl),
-                'data_source': 'Forward_Rate_Calculation_COMPLETE',
+                'data_source': 'Yahoo Finance Real Forward Rate Calculation',
                 'calculation_method': 'Forward Rate = Spot × e^(r/365 × t)',
                 'formula_used': f'Forward = Spot × e^({self.interest_rate}%/365 × days)'
             },
@@ -239,7 +298,7 @@ class ForwardRatePLCalculator:
         logger.info(f"  Final Close P&L: ₹{final_close_pl:,.2f}")
         logger.info(f"  Max Profit: ₹{max_profit:,.2f}")
         logger.info(f"  Max Loss: ₹{max_loss:,.2f}")
-        logger.info(f"  Data Points: {len(daily_pl)} (COMPLETE COVERAGE)")
+        logger.info(f"  Data Points: {len(daily_pl)} (REAL DATA + GAP FILLING)")
         logger.info(f"  Interest Rate: {self.interest_rate}%")
         
         return summary
@@ -255,10 +314,10 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'version': '3.0.0_Forward_Rate_FIXED',
-        'focus': 'Forward Rate LC Analysis - Complete Date Coverage',
+        'version': '3.0.0_REAL_DATA',
+        'focus': 'Forward Rate LC Analysis - Real Yahoo Finance Data',
         'formula': 'Forward = Spot × e^(r/365 × t)',
-        'data_source': 'Synthetic Data with Complete Coverage',
+        'data_source': 'Yahoo Finance Real Data with Gap Filling',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -266,20 +325,38 @@ def health_check():
 def get_current_rates():
     """Get current USD/INR rates and RBI rate"""
     try:
-        logger.info("Fetching current USD/INR rate and RBI rate")
+        logger.info("Fetching REAL current USD/INR rate from Yahoo Finance")
         
         # Get RBI rate
         rbi_provider = RBIRateProvider()
         rbi_rate = rbi_provider.get_rbi_repo_rate()
         
-        # Use fallback rate for demo
-        rate = 85.0
-        logger.info(f"Current rate: {rate:.4f}, RBI rate: {rbi_rate}%")
+        # Get REAL current USD/INR rate from Yahoo Finance
+        try:
+            ticker = yf.Ticker("USDINR=X")
+            data = ticker.history(period="1d")
+            if not data.empty:
+                rate = float(data['Close'].iloc[-1])
+                logger.info(f"REAL LIVE rate from Yahoo Finance: {rate:.4f}, RBI rate: {rbi_rate}%")
+                return jsonify({
+                    'success': True,
+                    'rate': round(rate, 4),
+                    'rbi_rate': rbi_rate,
+                    'source': 'Yahoo Finance Real Data',
+                    'timestamp': datetime.now().isoformat()
+                })
+            else:
+                logger.warning("No data from Yahoo Finance, using fallback")
+                rate = 85.0
+        except Exception as yf_error:
+            logger.error(f"Yahoo Finance error: {yf_error}, using fallback")
+            rate = 85.0
+        
         return jsonify({
             'success': True,
             'rate': round(rate, 4),
             'rbi_rate': rbi_rate,
-            'source': 'Demo Rate',
+            'source': 'Fallback Rate (Yahoo Finance unavailable)',
             'timestamp': datetime.now().isoformat()
         })
             
@@ -289,7 +366,7 @@ def get_current_rates():
             'success': True,
             'rate': 85.0,
             'rbi_rate': 6.5,
-            'source': 'Fallback Rate',
+            'source': 'Fallback Rate (Error)',
             'timestamp': datetime.now().isoformat()
         })
 
@@ -317,7 +394,7 @@ def calculate_forward_pl():
             business_type=business_type
         )
         
-        # Calculate P&L using forward rates
+        # Calculate P&L using forward rates with REAL DATA
         calculator = ForwardRatePLCalculator()
         result = calculator.calculate_daily_pl(lc, contract_rate)
         
@@ -327,8 +404,8 @@ def calculate_forward_pl():
         return jsonify({
             'success': True,
             'data': result,
-            'message': 'Forward rate P&L calculation completed (COMPLETE COVERAGE)',
-            'calculation_type': 'forward_rate_complete'
+            'message': 'Forward rate P&L calculation completed (REAL DATA)',
+            'calculation_type': 'forward_rate_real_data'
         })
         
     except Exception as e:
@@ -367,7 +444,7 @@ def get_suggested_contract_rate():
         # Calculate maturity days
         maturity_days = (maturity_dt - issue_dt).days
         
-        # Get COMPLETE historical data for the full range to ensure consistency
+        # Get REAL historical data for the full range to ensure consistency
         forex_provider = HistoricalForexProvider()
         historical_data = forex_provider.get_historical_rates(issue_date, maturity_date)
         
@@ -401,7 +478,7 @@ def get_suggested_contract_rate():
             'formula': f'Forward = {spot_rate:.4f} × e^({interest_rate}%/365 × {maturity_days})',
             'calculation_date': first_date,
             'data_points': len(historical_data),
-            'coverage': 'COMPLETE'
+            'coverage': 'REAL DATA + GAP FILLING'
         })
         
     except Exception as e:
@@ -412,7 +489,7 @@ def get_suggested_contract_rate():
         }), 500
 
 if __name__ == '__main__':
-    print("🌐 Forward Rate LC System starting on port 5000 (FIXED VERSION)")
+    print("🌐 REAL DATA LC System starting on port 5000")
     print("📊 Access dashboard: http://localhost:5000")
     print("🔧 API endpoints:")
     print("   - /api/health")
