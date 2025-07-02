@@ -135,11 +135,11 @@
                             <div class="row mb-3">
                                 <div class="col-md-6">
                                     <label for="issueDate" class="form-label">Issue Date</label>
-                                    <input type="date" class="form-control" id="issueDate" required>
+                                    <input type="date" class="form-control" id="issueDate" value="2025-05-03" required>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="maturityDate" class="form-label">Maturity Date</label>
-                                    <input type="date" class="form-control" id="maturityDate" required>
+                                    <input type="date" class="form-control" id="maturityDate" value="2025-06-02" required>
                                 </div>
                             </div>
                             <button type="submit" class="btn btn-primary btn-lg w-100">Calculate Backdated P&L</button>
@@ -181,23 +181,14 @@
         window.addEventListener('load', function() {
             console.log('🚀 Page loaded, initializing...');
             
-            // Set default dates
-            const today = new Date();
-            const twoMonthsAgo = new Date(today.getTime() - (60 * 24 * 60 * 60 * 1000)); // 60 days ago
-            const oneMonthAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000)); // 30 days ago
-            
-            const issueDateElement = document.getElementById('issueDate');
-            const maturityDateElement = document.getElementById('maturityDate');
-            
-            if (issueDateElement) {
-                issueDateElement.value = twoMonthsAgo.toISOString().split('T')[0];
-            }
-            if (maturityDateElement) {
-                maturityDateElement.value = oneMonthAgo.toISOString().split('T')[0];
-            }
+            // Use the default dates already set in HTML (2025-05-03 to 2025-06-02)
+            // No need to override them
             
             checkHealth();
             loadCurrentRates();
+            
+            // Auto-suggest contract rate on page load
+            updateSuggestedContractRate();
         });
 
         async function checkHealth() {
