@@ -6,7 +6,7 @@ Test the actual HistoricalForexProvider to see what data it's returning
 import sys
 sys.path.append('.')
 
-from app import HistoricalForexProvider
+from app import HistoricalForexProvider, ForexForwardCalculator
 import logging
 
 # Set up logging
